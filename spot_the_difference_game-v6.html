@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DEVIL'S PLAN // 실시간 틀린그림찾기 매치</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" async></script>
+  <style>
+    :root {
+      --bg-void: #090c14;
+      --bg-panel: #111726;
+      --bg-card: #161f33;
+      --gold: #eab308;
+      --gold-bright: #fde047;
+      --crimson: #ef4444;
+      --emerald: #22c55e;
+      --ice: #38bdf8;
+      --text-main: #f1f5f9;
+      --text-dim: #94a3b8;
+      --border-gold: rgba(234, 179, 8, 0.45);
+      --border-subtle: rgba(148, 163, 184, 0.22);
+    }
+    * {
+      box-sizing: border-box;
+      font-family: 'Pretendard', 'Apple SD Gothic Neo', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    }
+    body {
+      margin: 0;
+      background-color: var(--bg-void);
+      background-image:
+        linear-gradient(rgba(234, 179, 8, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(234, 179, 8, 0.035) 1px, transparent 1px),
+        radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.12), transparent 55%);
+      background-size: 38px 38px, 38px 38px, 100% 100%;
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 20px;
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .dp-card {
+      background: linear-gradient(180deg, rgba(22, 31, 51, 0.96) 0%, rgba(13, 18, 32, 0.98) 100%);
+      border: 1.5px solid var(--border-gold);
+      border-radius: 14px;
+      padding: 28px 32px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(253, 224, 71, 0.2);
+      text-align: center;
+      position: relative;
+    }
+    .dp-eyebrow {
+      display: inline-block;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--gold);
+      border: 1px solid rgba(234, 179, 8, 0.4);
+      background: rgba(234, 179, 8, 0.08);
+      padding: 4px 14px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+    .dp-title {
+      font-size: 2rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      margin: 4px 0 10px 0;
+      color: #ffffff;
+    }
+    .dp-title span {
+      color: var(--gold-bright);
+    }
+    .dp-sub {
+      color: var(--text-dim);
+      font-size: 0.98rem;
+      line-height: 1.55;
+      margin: 0 auto 22px auto;
+      max-width: 680px;
+    }
+
+    .dp-stage-strip {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 0 auto 22px auto;
+    }
+    .dp-tag {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #e2e8f0;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border-subtle);
+      padding: 5px 12px;
+      border-radius: 6px;
+    }
+
+    .btn {
+      background: linear-gradient(180deg, #facc15 0%, #eab308 100%);
+      color: #090c14;
+      border: 1px solid #fef08a;
+      padding: 12px 24px;
+      font-size: 1rem;
+      font-weight: 900;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.14s ease;
+      margin: 6px;
+      box-shadow: 0 4px 16px rgba(234, 179, 8, 0.25);
+    }
+    .btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
+    .btn:active { transform: translateY(1px); }
+    .btn:disabled { background: #1e293b; color: #64748b; border-color: #334155; box-shadow: none; cursor: not-allowed; transform: none; }
+    .btn-ghost {
+      background: rgba(30, 41, 59, 0.85);
+      color: #f8fafc;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      box-shadow: none;
+    }
+    .btn-ghost:hover { background: rgba(51, 65, 85, 0.95); }
+    .btn-ice {
+      background: rgba(14, 116, 144, 0.35);
+      color: #bae6fd;
+      border: 1px solid rgba(56, 189, 248, 0.5);
+      box-shadow: none;
+    }
+    .btn-ice:hover { background: rgba(14, 116, 144, 0.55); }
+
+    input {
+      padding: 12px 16px;
+      font-size: 1.05rem;
+      border: 1.5px solid rgba(234, 179, 8, 0.45);
+      border-radius: 8px;
+      width: 100%;
+      max-width: 310px;
+      margin-bottom: 12px;
+      text-align: center;
+      font-weight: 800;
+      background: #090c14;
+      color: #ffffff;
+    }
+    input:focus { outline: none; border-color: var(--gold-bright); }
+    .hidden { display: none !important; }
+
+    /* 상단 HUD: 왼쪽 타이머 / 오른쪽 실시간 TOP 5 랭킹 */
+    #hud {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      pointer-events: none;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 12px 20px;
+    }
+    .timer-box {
+      background: rgba(13, 18, 32, 0.94);
+      color: var(--gold-bright);
+      border: 1.5px solid var(--border-gold);
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 1.2rem;
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .timer-warning {
+      background: rgba(153, 27, 27, 0.95) !important;
+      color: #ffffff !important;
+      border-color: #f87171 !important;
+      animation: pulse 0.9s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    .ranking-box {
+      background: rgba(13, 18, 32, 0.95);
+      border: 1.5px solid var(--border-gold);
+      padding: 10px 15px;
+      border-radius: 10px;
+      min-width: 230px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
+      pointer-events: auto;
+    }
+    .ranking-box h4 {
+      margin: 0 0 7px 0;
+      padding-bottom: 5px;
+      border-bottom: 1px solid rgba(234, 179, 8, 0.28);
+      color: var(--gold);
+      font-size: 0.85rem;
+      letter-spacing: 0.12em;
+      text-align: center;
+    }
+    .rank-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      font-size: 0.92rem;
+    }
+    .rank-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 6px;
+      border-radius: 5px;
+      font-weight: 700;
+      transition: background 0.25s;
+    }
+    .rank-list li:first-child {
+      background: rgba(234, 179, 8, 0.18);
+      color: var(--gold-bright);
+      font-weight: 900;
+    }
+    .rank-flash-plus { background: rgba(34, 197, 94, 0.28) !important; }
+    .rank-flash-minus { background: rgba(239, 68, 68, 0.32) !important; }
+
+    .lobby-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      align-items: center;
+      margin-top: 16px;
+    }
+    .qr-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 14px;
+      background: #ffffff;
+      border-radius: 10px;
+      border: 2px solid var(--gold);
+      width: fit-content;
+      margin: 0 auto;
+    }
+    #qr-canvas {
+      width: 205px;
+      height: 205px;
+      image-rendering: pixelated;
+      background: #ffffff;
+    }
+    .player-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      max-height: 230px;
+      overflow-y: auto;
+      padding: 12px;
+      background: rgba(9, 12, 20, 0.72);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+    }
+    .badge {
+      background: rgba(234, 179, 8, 0.14);
+      color: var(--gold-bright);
+      border: 1px solid rgba(234, 179, 8, 0.45);
+      padding: 5px 13px;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 0.92rem;
+    }
+
+    #game-area {
+      margin-top: 72px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .phase-banner {
+      background: rgba(17, 23, 38, 0.95);
+      color: var(--gold-bright);
+      border: 1.5px solid var(--border-gold);
+      padding: 8px 22px;
+      border-radius: 8px;
+      font-size: 1.08rem;
+      font-weight: 800;
+      margin-bottom: 12px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    }
+    #game-canvas {
+      background: #1a1f2e;
+      border: 2px solid var(--border-gold);
+      border-radius: 10px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.7);
+      max-width: 100%;
+      height: auto;
+      cursor: crosshair;
+      touch-action: manipulation;
+    }
+    .score-pill-bar {
+      background: rgba(17, 23, 38, 0.92);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 8px 20px;
+      font-weight: 800;
+      font-size: 1rem;
+      margin-top: 12px;
+    }
+
+    /* 라운드 종료 정답 비교 + 전체 순위 모달 */
+    #round-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 6, 12, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 14px;
+      overflow-y: auto;
+    }
+    .modal-content {
+      background: var(--bg-panel);
+      border: 1.5px solid var(--border-gold);
+      padding: 22px;
+      border-radius: 14px;
+      max-width: 980px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
+      max-height: 94vh;
+      overflow-y: auto;
+    }
+    .compare-wrapper {
+      margin: 10px auto;
+      background: rgba(9, 12, 20, 0.85);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .compare-labels {
+      display: flex;
+      justify-content: space-around;
+      font-weight: 800;
+      font-size: 0.98rem;
+      color: var(--gold);
+      margin-bottom: 6px;
+    }
+    #compare-canvas {
+      width: 100%;
+      max-width: 900px;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: #121622;
+    }
+    .my-rank-highlight {
+      background: rgba(234, 179, 8, 0.16);
+      border: 1px solid var(--gold);
+      padding: 10px;
+      border-radius: 8px;
+      margin: 10px auto;
+      max-width: 560px;
+      font-size: 1.1rem;
+      font-weight: 900;
+      color: var(--gold-bright);
+    }
+    .full-rank-table {
+      width: 100%;
+      max-width: 520px;
+      border-collapse: collapse;
+      margin: 10px auto 0 auto;
+      max-height: 165px;
+      overflow-y: auto;
+      display: block;
+      background: rgba(9, 12, 20, 0.78);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+    }
+    .full-rank-table th,
+    .full-rank-table td {
+      padding: 7px 12px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      text-align: center;
+      width: 33.3%;
+      font-weight: 700;
+    }
+    .full-rank-table th {
+      color: var(--gold);
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 768px) {
+      .lobby-grid { grid-template-columns: 1fr; }
+      #hud { padding: 8px; }
+      .timer-box { font-size: 0.95rem; padding: 7px 12px; }
+      .ranking-box { min-width: 155px; padding: 7px 10px; font-size: 0.82rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 상단 HUD: 왼쪽 타이머 / 오른쪽 실시간 TOP 5 -->
+  <div id="hud" class="hidden">
+    <div class="timer-box" id="timer-box">
+      <span id="round-indicator">ROUND 01 / 10</span>
+      <span>|</span>
+      <span id="timer-display">20초</span>
+    </div>
+    <div class="ranking-box">
+      <h4>LIVE STANDINGS · TOP 5</h4>
+      <ul class="rank-list" id="top5-list">
+        <li>데이터 대기중...</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 1. 초기 화면 (데블스 플랜 스타일 템플릿) -->
+  <div class="container" id="screen-home">
+    <div class="dp-card">
+      <div class="dp-eyebrow">OBSERVATION &amp; DEDUCTION MATCH</div>
+      <div class="dp-title">DEVIL'S PLAN <span>//</span> 틀린그림찾기</div>
+      <p class="dp-sub">
+        원래 그림을 20초간 스캔하고, 달라진 그림에서 40초 안에 변화된 디테일을 찾아내세요.<br />
+        정답 <strong>+1점</strong> · 오답 <strong>-1점</strong> — 모든 참가자의 순위가 실시간으로 갱신됩니다.
+      </p>
+      <div class="dp-stage-strip">
+        <span class="dp-tag">⛺ 별빛 캠핑장</span>
+        <span class="dp-tag">🕹️ 네온 아케이드</span>
+        <span class="dp-tag">🌊 심해 잠수함</span>
+        <span class="dp-tag">🏜️ 사막 야영지</span>
+        <span class="dp-tag">🌃 옥상 루프탑</span>
+        <span class="dp-tag">🔭 천문대 정원</span>
+      </div>
+      <button type="button" class="btn" id="btn-role-admin">호스트(선생님) 방 개설</button>
+      <button type="button" class="btn btn-ghost" id="btn-role-student">플레이어(학생) 입장</button>
+    </div>
+  </div>
+
+  <!-- 2. 관리자 대기실 -->
+  <div class="container hidden" id="screen-admin-lobby">
+    <div class="dp-card">
+      <div class="dp-eyebrow">MATCH LOBBY</div>
+      <h2 class="dp-title" style="font-size: 1.5rem; margin-bottom: 8px;">플레이어 초대 대기실</h2>
+      <p style="font-size: 1.05rem; font-weight: 800; margin: 6px 0;">
+        ROOM CODE: <strong id="display-room-code" style="font-size: 1.35rem; color: var(--gold-bright);">생성 중...</strong>
+        <span id="network-mode-badge" style="font-size: 0.78rem; background: rgba(234,179,8,0.14); border: 1px solid rgba(234,179,8,0.4); color: var(--gold); border-radius: 4px; padding: 2px 8px; margin-left: 6px;">연결 준비 중</span>
+      </p>
+      <div class="lobby-grid">
+        <div>
+          <div class="qr-box">
+            <canvas id="qr-canvas" width="205" height="205"></canvas>
+            <span id="qr-url-text" style="font-size: 0.72rem; color: #1e293b; margin-top: 6px; max-width: 235px; word-break: break-all; font-weight: 700;"></span>
+          </div>
+          <p style="font-size: 0.86rem; color: var(--text-dim); margin-top: 8px;">
+            📱 스마트폰 카메라로 QR코드를 스캔하면 자동 입장됩니다.
+          </p>
+          <div id="local-file-url-box" class="hidden" style="margin-top: 8px;">
+            <input type="text" id="custom-host-url" placeholder="배포된 웹 주소 입력 시 QR 즉시 갱신" style="max-width: 260px; padding: 7px 12px; font-size: 0.84rem; margin-bottom: 4px;" />
+            <button type="button" class="btn btn-ghost" id="btn-update-qr-url" style="padding: 6px 14px; font-size: 0.8rem;">QR 주소 반영</button>
+          </div>
+          <button type="button" class="btn btn-ice" id="btn-add-demo-students" style="padding: 8px 16px; font-size: 0.86rem; margin-top: 6px;">
+            + 테스트 플레이어(1~5번) 추가
+          </button>
+        </div>
+        <div>
+          <h3 style="margin-top: 0; color: var(--gold);">접속 플레이어 (<span id="player-count">0</span>명)</h3>
+          <div class="player-badges" id="lobby-player-list"></div>
+        </div>
+      </div>
+      <div style="margin-top: 20px;">
+        <button type="button" class="btn" id="btn-start-game" disabled>매치 시작 (ROUND 01)</button>
+        <button type="button" class="btn btn-ghost" id="btn-admin-reset">처음으로</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 학생 입장 화면 -->
+  <div class="container hidden" id="screen-student-join">
+    <div class="dp-card">
+      <div class="dp-eyebrow">PLAYER ENTRY</div>
+      <h2 class="dp-title" style="font-size: 1.5rem;">플레이어 번호 등록</h2>
+      <p style="color: var(--text-dim);">방 코드를 확인하고 본인의 <strong>출석 번호</strong>를 입력하세요.</p>
+      <div><input type="text" id="input-room-code" placeholder="방 코드 (예: CLASS1234)" /></div>
+      <div><input type="number" id="input-student-num" placeholder="본인 번호 입력 (예: 7)" min="1" max="999" /></div>
+      <div>
+        <button type="button" class="btn" id="btn-join-room">입장하기</button>
+        <button type="button" class="btn btn-ghost" id="btn-join-back">뒤로</button>
+      </div>
+      <p id="join-status" style="color: #f87171; font-weight: 800;"></p>
+    </div>
+  </div>
+
+  <!-- 4. 학생 대기 화면 -->
+  <div class="container hidden" id="screen-student-wait">
+    <div class="dp-card">
+      <div class="dp-eyebrow">READY IN CHAMBER</div>
+      <h2 class="dp-title" style="font-size: 1.5rem;">등록 완료</h2>
+      <p style="font-size: 1.25rem; font-weight: 900;">플레이어: <strong id="my-badge-display" style="color: var(--gold-bright);"></strong></p>
+      <p style="color: var(--text-dim);">호스트가 라운드를 시작할 때까지 대기해 주세요.</p>
+      <div style="margin-top: 16px; padding: 14px; background: rgba(9, 12, 20, 0.72); border: 1px solid var(--border-subtle); border-radius: 8px; font-size: 0.94rem; text-align: left; max-width: 580px; margin-left: auto; margin-right: auto;">
+        <strong style="color: var(--gold);">[MATCH RULE]</strong><br />
+        1. <strong>원래 그림(20초)</strong>에서 캐릭터의 복장·소품·표지판·배경 디테일을 기억합니다.<br />
+        2. <strong>달라진 그림(40초)</strong>에서 바뀐 부분을 선택하세요. (정답 <strong>+1점</strong> / 오답 <strong>-1점</strong> 실시간 반영)
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. 게임 플레이 화면 -->
+  <div class="container hidden" id="screen-game">
+    <div id="game-area">
+      <div class="phase-banner" id="phase-banner">👀 [원래 그림] 20초 동안 장면을 기억하세요!</div>
+      <canvas id="game-canvas" width="900" height="540"></canvas>
+      <div class="score-pill-bar" id="student-score-status">점수 불러오는 중...</div>
+    </div>
+  </div>
+
+  <!-- 6. 라운드 종료 결과 + 원래 그림/달라진 그림 정답 비교 모달 -->
+  <div id="round-modal" class="hidden">
+    <div class="modal-content">
+      <div class="dp-eyebrow">ROUND ANALYSIS</div>
+      <h2 id="modal-title" style="margin: 4px 0 8px 0; font-weight: 900;">1라운드 종료! 정답 비교</h2>
+      <div class="compare-wrapper">
+        <div class="compare-labels">
+          <span>◀ ORIGINAL SCENE (원래 그림)</span>
+          <span>ALTERED SCENE (달라진 그림 · 정답 표시) ▶</span>
+        </div>
+        <canvas id="compare-canvas" width="920" height="275"></canvas>
+        <p style="margin: 6px 0 0 0; font-size: 0.88rem; color: #cbd5e1; font-weight: 700;">
+          <span style="color:#f87171;">● 빨간 실선</span>: 내가 찾은 정답 &nbsp;|&nbsp;
+          <span style="color:#38bdf8;">○ 파란 점선</span>: 놓친 정답 (총 <span id="modal-diff-count">0</span>곳)
+        </p>
+      </div>
+
+      <div id="my-rank-box" class="my-rank-highlight hidden"></div>
+
+      <table class="full-rank-table">
+        <thead>
+          <tr><th>RANK</th><th>PLAYER</th><th>SCORE</th></tr>
+        </thead>
+        <tbody id="modal-rank-body"></tbody>
+      </table>
+
+      <div id="admin-next-controls" class="hidden" style="margin-top: 14px;">
+        <button type="button" class="btn" id="btn-next-round">다음 라운드 시작 ▶</button>
+        <button type="button" class="btn btn-ice" id="btn-export-csv">📊 결과 CSV 내보내기</button>
+      </div>
+      <p id="student-wait-next" class="hidden" style="margin-top: 12px; color: var(--gold); font-weight: 800;">
+        호스트가 다음 라운드를 준비 중입니다...
+      </p>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      /* =========================================================================
+         1. 내장 표준 QR Code 생성기 (ISO/IEC 18004 Byte Mode, Version 1~6)
+         ========================================================================= */
+      const QRGenerator = (function () {
+        const EXP = new Uint8Array(512);
+        const LOG = new Uint8Array(256);
+        let x = 1;
+        for (let i = 0; i < 255; i++) {
+          EXP[i] = x;
+          LOG[x] = i;
+          x <<= 1;
+          if (x & 0x100) x ^= 0x11d;
+        }
+        for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+
+        function gfMul(a, b) {
+          return a === 0 || b === 0 ? 0 : EXP[LOG[a] + LOG[b]];
+        }
+
+        function rsGeneratorPoly(deg) {
+          let poly = [1];
+          for (let i = 0; i < deg; i++) {
+            const next = new Array(poly.length + 1).fill(0);
+            for (let j = 0; j < poly.length; j++) {
+              next[j] ^= poly[j];
+              next[j + 1] ^= gfMul(poly[j], EXP[i]);
+            }
+            poly = next;
+          }
+          return poly;
+        }
+
+        function rsEncode(data, ecLen) {
+          const gen = rsGeneratorPoly(ecLen);
+          const res = new Uint8Array(data.length + ecLen);
+          res.set(data);
+          for (let i = 0; i < data.length; i++) {
+            const coef = res[i];
+            if (coef !== 0) {
+              for (let j = 0; j < gen.length; j++) {
+                res[i + j] ^= gfMul(gen[j], coef);
+              }
+            }
+          }
+          return res.slice(data.length);
+        }
+
+        const VERSIONS = [
+          null,
+          { size: 21, totalCodewords: 26, ecCodewords: 7, dataCodewords: 19, align: [] },
+          { size: 25, totalCodewords: 44, ecCodewords: 10, dataCodewords: 34, align: [6, 18] },
+          { size: 29, totalCodewords: 70, ecCodewords: 15, dataCodewords: 55, align: [6, 22] },
+          { size: 33, totalCodewords: 100, ecCodewords: 20, dataCodewords: 80, align: [6, 26] },
+          { size: 37, totalCodewords: 134, ecCodewords: 26, dataCodewords: 108, align: [6, 30] },
+          { size: 41, totalCodewords: 172, ecCodewords: 36, dataCodewords: 136, align: [6, 34] }
+        ];
+
+        function encode(text) {
+          const bytes = new TextEncoder().encode(text);
+          let ver = 1;
+          while (ver <= 6 && VERSIONS[ver].dataCodewords - 2 < bytes.length) ver++;
+          if (ver > 6) ver = 6;
+          const info = VERSIONS[ver];
+          const maxBytes = info.dataCodewords - 2;
+          const payload = bytes.slice(0, maxBytes);
+
+          const bits = [];
+          const pushBits = (val, len) => {
+            for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1);
+          };
+          pushBits(0b0100, 4);
+          pushBits(payload.length, 8);
+          for (const b of payload) pushBits(b, 8);
+          pushBits(0, Math.min(4, info.dataCodewords * 8 - bits.length));
+          while (bits.length % 8 !== 0) bits.push(0);
+
+          const dataCW = new Uint8Array(info.dataCodewords);
+          for (let i = 0; i < bits.length / 8; i++) {
+            let byte = 0;
+            for (let b = 0; b < 8; b++) byte = (byte << 1) | bits[i * 8 + b];
+            dataCW[i] = byte;
+          }
+          const pads = [0xec, 0x11];
+          for (let i = bits.length / 8, p = 0; i < info.dataCodewords; i++, p++) {
+            dataCW[i] = pads[p % 2];
+          }
+
+          const ecCW = rsEncode(dataCW, info.ecCodewords);
+          const allCW = new Uint8Array(info.totalCodewords);
+          allCW.set(dataCW);
+          allCW.set(ecCW, dataCW.length);
+
+          const N = info.size;
+          const grid = Array.from({ length: N }, () => new Int8Array(N).fill(-1));
+          const isFunc = Array.from({ length: N }, () => new Uint8Array(N));
+
+          function setFunc(r, c, val) {
+            if (r >= 0 && r < N && c >= 0 && c < N) {
+              grid[r][c] = val ? 1 : 0;
+              isFunc[r][c] = 1;
+            }
+          }
+
+          function drawFinder(r0, c0) {
+            for (let dr = -1; dr <= 7; dr++) {
+              for (let dc = -1; dc <= 7; dc++) {
+                const inOuter = dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6;
+                const onBorder = dr === 0 || dr === 6 || dc === 0 || dc === 6;
+                const inInner = dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4;
+                setFunc(r0 + dr, c0 + dc, inOuter && (onBorder || inInner) ? 1 : 0);
+              }
+            }
+          }
+
+          drawFinder(0, 0);
+          drawFinder(0, N - 7);
+          drawFinder(N - 7, 0);
+
+          if (info.align.length > 0) {
+            const r0 = info.align[1] - 2;
+            const c0 = info.align[1] - 2;
+            for (let dr = 0; dr < 5; dr++) {
+              for (let dc = 0; dc < 5; dc++) {
+                const dark = dr === 0 || dr === 4 || dc === 0 || dc === 4 || (dr === 2 && dc === 2);
+                setFunc(r0 + dr, c0 + dc, dark ? 1 : 0);
+              }
+            }
+          }
+
+          for (let i = 8; i < N - 8; i++) {
+            setFunc(6, i, i % 2 === 0 ? 1 : 0);
+            setFunc(i, 6, i % 2 === 0 ? 1 : 0);
+          }
+
+          for (let i = 0; i <= 8; i++) {
+            if (i !== 6) {
+              isFunc[8][i] = 1;
+              isFunc[i][8] = 1;
+            }
+          }
+          for (let i = 0; i < 8; i++) {
+            isFunc[8][N - 1 - i] = 1;
+            isFunc[N - 1 - i][8] = 1;
+          }
+          setFunc(N - 8, 8, 1);
+
+          let bitIdx = 0;
+          const totalBits = allCW.length * 8;
+          let dirUp = true;
+          for (let right = N - 1; right >= 1; right -= 2) {
+            if (right === 6) right = 5;
+            for (let step = 0; step < N; step++) {
+              const r = dirUp ? N - 1 - step : step;
+              for (let lr = 0; lr < 2; lr++) {
+                const c = right - lr;
+                if (!isFunc[r][c]) {
+                  let bit = 0;
+                  if (bitIdx < totalBits) {
+                    bit = (allCW[bitIdx >>> 3] >>> (7 - (bitIdx & 7))) & 1;
+                    bitIdx++;
+                  }
+                  if ((r + c) % 2 === 0) bit ^= 1;
+                  grid[r][c] = bit;
+                }
+              }
+            }
+            dirUp = !dirUp;
+          }
+
+          const fmt = 0b111011111000100;
+          const fmtCoords1 = [
+            [8, 0], [8, 1], [8, 2], [8, 3], [8, 4], [8, 5], [8, 7], [8, 8],
+            [7, 8], [5, 8], [4, 8], [3, 8], [2, 8], [1, 8], [0, 8]
+          ];
+          const fmtCoords2 = [
+            [N - 1, 8], [N - 2, 8], [N - 3, 8], [N - 4, 8], [N - 5, 8], [N - 6, 8], [N - 7, 8],
+            [8, N - 8], [8, N - 7], [8, N - 6], [8, N - 5], [8, N - 4], [8, N - 3], [8, N - 2], [8, N - 1]
+          ];
+          for (let i = 0; i < 15; i++) {
+            const bit = (fmt >>> (14 - i)) & 1;
+            const [r1, c1] = fmtCoords1[i];
+            const [r2, c2] = fmtCoords2[i];
+            grid[r1][c1] = bit;
+            grid[r2][c2] = bit;
+          }
+          return grid;
+        }
+
+        function renderToCanvas(canvasEl, text) {
+          const grid = encode(text);
+          const N = grid.length;
+          const quiet = 4;
+          const totalModules = N + quiet * 2;
+          const size = canvasEl.width;
+          const cell = size / totalModules;
+          const ctx = canvasEl.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, size, size);
+          ctx.fillStyle = '#000000';
+          for (let r = 0; r < N; r++) {
+            for (let c = 0; c < N; c++) {
+              if (grid[r][c] === 1) {
+                ctx.fillRect(
+                  Math.floor((c + quiet) * cell),
+                  Math.floor((r + quiet) * cell),
+                  Math.ceil(cell),
+                  Math.ceil(cell)
+                );
+              }
+            }
+          }
+        }
+        return { renderToCanvas };
+      })();
+
+      /* =========================================================================
+         2. 실시간 다중 기기 동기화 (PeerJS + BroadcastChannel) & 점수(+1 / -1)
+         ========================================================================= */
+      const TOTAL_ROUNDS = 10;
+      const PHASE1_TIME = 20;
+      const PHASE2_TIME = 40;
+
+      let role = null;
+      let roomCode = '';
+      let peer = null;
+      let peerConnections = {};
+      let adminPeerConn = null;
+      let broadcastChannel = null;
+
+      let myStudentNum = null;
+      let players = {};
+      let lastRankFlash = {};
+
+      let currentRound = 1;
+      let currentPhase = 'idle';
+      let timeLeft = 0;
+      let timerInterval = null;
+      let announced10Sec = false;
+
+      let roundSceneData = null;
+      let foundDiffIds = new Set();
+      let wrongClicks = [];
+      let lastPenaltyTime = 0;
+
+      const canvas = document.getElementById('game-canvas');
+      const ctx = canvas.getContext('2d');
+
+      function showScreen(id) {
+        ['screen-home', 'screen-admin-lobby', 'screen-student-join', 'screen-student-wait', 'screen-game'].forEach((s) => {
+          const el = document.getElementById(s);
+          if (el) el.classList.add('hidden');
+        });
+        const target = document.getElementById(id);
+        if (target) target.classList.remove('hidden');
+      }
+
+      function resetToHome() {
+        clearInterval(timerInterval);
+        document.getElementById('round-modal').classList.add('hidden');
+        document.getElementById('hud').classList.add('hidden');
+        if (peer) {
+          try { peer.destroy(); } catch (_) {}
+          peer = null;
+        }
+        peerConnections = {};
+        adminPeerConn = null;
+        role = null;
+        players = {};
+        currentRound = 1;
+        currentPhase = 'idle';
+        showScreen('screen-home');
+      }
+
+      function speak10SecondsLeft() {
+        try {
+          if (!('speechSynthesis' in window)) return;
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance('10초 남았습니다.');
+          utterance.lang = 'ko-KR';
+          utterance.rate = 1.05;
+          utterance.pitch = 1.15;
+          const voices = window.speechSynthesis.getVoices() || [];
+          const koFemale =
+            voices.find(
+              (v) =>
+                v.lang &&
+                v.lang.toLowerCase().includes('ko') &&
+                (v.name.includes('Female') ||
+                  v.name.includes('Yuna') ||
+                  v.name.includes('Heami') ||
+                  v.name.includes('SunHi') ||
+                  v.name.includes('Google'))
+            ) || voices.find((v) => v.lang && v.lang.toLowerCase().includes('ko'));
+          if (koFemale) utterance.voice = koFemale;
+          window.speechSynthesis.speak(utterance);
+        } catch (_) {}
+      }
+
+      function getJoinUrl(code, overrideBase) {
+        let base = overrideBase || window.location.href.split('?')[0].split('#')[0];
+        if (!base.startsWith('http')) return `DEVILSPLAN-ROOM:${code}`;
+        return `${base}?room=${encodeURIComponent(code)}`;
+      }
+
+      function renderRoomQR(code, overrideBase) {
+        const joinUrl = getJoinUrl(code, overrideBase);
+        QRGenerator.renderToCanvas(document.getElementById('qr-canvas'), joinUrl);
+        document.getElementById('qr-url-text').innerText = joinUrl;
+
+        const isLocalFile = !window.location.href.startsWith('http') && !overrideBase;
+        const localBox = document.getElementById('local-file-url-box');
+        if (isLocalFile) localBox.classList.remove('hidden');
+        else localBox.classList.add('hidden');
+      }
+
+      function setupLocalChannel(code) {
+        if (broadcastChannel && typeof broadcastChannel.close === 'function') {
+          try { broadcastChannel.close(); } catch (_) {}
+        }
+        if ('BroadcastChannel' in window) {
+          broadcastChannel = new BroadcastChannel('DEVILSPLAN_SPOT_' + code);
+          broadcastChannel.onmessage = (e) => {
+            if (!e.data) return;
+            if (role === 'admin') handleAdminMessage(e.data, null);
+            else if (role === 'student') handleStudentMessage(e.data);
+          };
+        }
+      }
+
+      function broadcastToAllStudents(msg) {
+        Object.values(peerConnections).forEach((conn) => {
+          if (conn && conn.open) {
+            try { conn.send(msg); } catch (_) {}
+          }
+        });
+        if (broadcastChannel) {
+          try { broadcastChannel.postMessage(msg); } catch (_) {}
+        }
+      }
+
+      function sendToAdmin(msg) {
+        if (adminPeerConn && adminPeerConn.open) {
+          try { adminPeerConn.send(msg); } catch (_) {}
+        }
+        if (broadcastChannel) {
+          try { broadcastChannel.postMessage(msg); } catch (_) {}
+        }
+      }
+
+      function initAdmin() {
+        role = 'admin';
+        players = {};
+        peerConnections = {};
+        const randomNum = Math.floor(1000 + Math.random() * 9000);
+        roomCode = 'CLASS' + randomNum;
+
+        document.getElementById('display-room-code').innerText = roomCode;
+        renderRoomQR(roomCode);
+        setupLocalChannel(roomCode);
+        updateAdminLobbyUI();
+        showScreen('screen-admin-lobby');
+
+        const badge = document.getElementById('network-mode-badge');
+        badge.innerText = '서버 연결 중...';
+
+        if (typeof Peer !== 'undefined') {
+          try {
+            peer = new Peer('DEVILSPLAN-' + roomCode);
+            peer.on('open', () => {
+              badge.innerText = '🟢 실시간 멀티 기기 연결됨';
+            });
+            peer.on('connection', (conn) => {
+              conn.on('data', (data) => handleAdminMessage(data, conn));
+            });
+            peer.on('error', () => {
+              badge.innerText = '🟡 로컬/단일 기기 모드';
+            });
+          } catch (_) {
+            badge.innerText = '🟡 로컬/단일 기기 모드';
+          }
+        } else {
+          badge.innerText = '🟡 로컬/단일 기기 모드';
+        }
+      }
+
+      function handleAdminMessage(data, conn) {
+        if (!data || !data.type) return;
+        if (data.type === 'JOIN') {
+          const num = String(data.studentNum).trim();
+          if (!num) return;
+          if (conn) peerConnections[num] = conn;
+          if (!players[num]) players[num] = { num: num, score: 0 };
+          updateAdminLobbyUI();
+          updateTop5HUD();
+          if (conn && conn.open) {
+            try { conn.send({ type: 'JOIN_OK', targetNum: num, players: players }); } catch (_) {}
+          }
+          broadcastToAllStudents({ type: 'SYNC_PLAYERS', players: players });
+        } else if (data.type === 'SCORE_DELTA') {
+          const num = String(data.studentNum).trim();
+          const delta = Number(data.delta || 0);
+          if (players[num] && delta !== 0) {
+            players[num].score += delta;
+            lastRankFlash[num] = delta > 0 ? 'plus' : 'minus';
+            updateTop5HUD();
+            broadcastToAllStudents({
+              type: 'SYNC_PLAYERS',
+              players: players,
+              flashNum: num,
+              flashType: delta > 0 ? 'plus' : 'minus'
+            });
+          }
+        }
+      }
+
+      function addDemoStudents() {
+        ['1', '2', '3', '4', '5'].forEach((num) => {
+          if (!players[num]) players[num] = { num: num, score: 0 };
+        });
+        updateAdminLobbyUI();
+        broadcastToAllStudents({ type: 'SYNC_PLAYERS', players: players });
+      }
+
+      function updateAdminLobbyUI() {
+        const listEl = document.getElementById('lobby-player-list');
+        const keys = Object.keys(players).sort((a, b) => Number(a) - Number(b));
+        document.getElementById('player-count').innerText = keys.length;
+        listEl.innerHTML =
+          keys.length > 0
+            ? keys.map((k) => `<span class="badge">PLAYER ${k}번</span>`).join('')
+            : '<span style="color:#64748b;">QR코드로 접속하면 플레이어 번호가 표시됩니다.</span>';
+        document.getElementById('btn-start-game').disabled = keys.length === 0;
+      }
+
+      function showStudentJoin() {
+        role = 'student';
+        document.getElementById('join-status').innerText = '';
+        showScreen('screen-student-join');
+      }
+
+      function joinRoom() {
+        const codeInput = document.getElementById('input-room-code').value.trim().toUpperCase();
+        const numInput = document.getElementById('input-student-num').value.trim();
+        const statusEl = document.getElementById('join-status');
+
+        if (!codeInput || !numInput) {
+          statusEl.innerText = '방 코드와 본인 출석 번호를 모두 입력해주세요.';
+          return;
+        }
+
+        roomCode = codeInput;
+        myStudentNum = numInput;
+        players[myStudentNum] = { num: myStudentNum, score: 0 };
+        setupLocalChannel(roomCode);
+
+        document.getElementById('my-badge-display').innerText = `${myStudentNum}번 플레이어`;
+        statusEl.innerText = '방에 연결 중입니다...';
+
+        sendToAdmin({ type: 'JOIN', studentNum: myStudentNum });
+
+        if (typeof Peer !== 'undefined') {
+          try {
+            peer = new Peer();
+            peer.on('open', () => {
+              adminPeerConn = peer.connect('DEVILSPLAN-' + roomCode, { reliable: true });
+              adminPeerConn.on('open', () => {
+                adminPeerConn.send({ type: 'JOIN', studentNum: myStudentNum });
+                showScreen('screen-student-wait');
+              });
+              adminPeerConn.on('data', (data) => handleStudentMessage(data));
+              adminPeerConn.on('error', () => showScreen('screen-student-wait'));
+            });
+            peer.on('error', () => showScreen('screen-student-wait'));
+          } catch (_) {
+            showScreen('screen-student-wait');
+          }
+        } else {
+          showScreen('screen-student-wait');
+        }
+      }
+
+      function handleStudentMessage(data) {
+        if (!data || !data.type) return;
+        if (data.type === 'JOIN_OK') {
+          players = Object.assign({}, data.players);
+          updateTop5HUD();
+          showScreen('screen-student-wait');
+        } else if (data.type === 'SYNC_PLAYERS') {
+          players = Object.assign({}, data.players);
+          if (data.flashNum) lastRankFlash[data.flashNum] = data.flashType;
+          updateTop5HUD();
+          updateStudentScoreText();
+        } else if (data.type === 'START_ROUND') {
+          currentRound = data.round;
+          roundSceneData = data.scene;
+          foundDiffIds.clear();
+          wrongClicks = [];
+          document.getElementById('round-modal').classList.add('hidden');
+          startRoundFlow();
+        } else if (data.type === 'ROUND_END') {
+          players = Object.assign({}, data.players);
+          showRoundResultModal();
+        }
+      }
+
+      function startGame() {
+        currentRound = 1;
+        launchAdminRound(currentRound);
+      }
+
+      function nextRound() {
+        if (currentRound >= TOTAL_ROUNDS) {
+          resetToHome();
+          return;
+        }
+        currentRound++;
+        launchAdminRound(currentRound);
+      }
+
+      function launchAdminRound(roundNum) {
+        document.getElementById('round-modal').classList.add('hidden');
+        roundSceneData = generateIllustratedStageScene(roundNum);
+        foundDiffIds.clear();
+        wrongClicks = [];
+
+        broadcastToAllStudents({
+          type: 'START_ROUND',
+          round: roundNum,
+          scene: roundSceneData
+        });
+        startRoundFlow();
+      }
+
+      function startRoundFlow() {
+        showScreen('screen-game');
+        document.getElementById('hud').classList.remove('hidden');
+        document.getElementById('round-indicator').innerText = `ROUND ${String(currentRound).padStart(2, '0')} / ${TOTAL_ROUNDS}`;
+        updateTop5HUD();
+        updateStudentScoreText();
+
+        currentPhase = 'memorize';
+        timeLeft = PHASE1_TIME;
+        announced10Sec = false;
+        const stageName = roundSceneData ? roundSceneData.stage.name : '';
+        document.getElementById('phase-banner').innerText = `👀 [원래 그림 · ${stageName}] 20초 동안 장면을 기억하세요!`;
+        renderSceneToContext(ctx, canvas.width, canvas.height, false, false);
+
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+          timeLeft--;
+          updateTimerHUD();
+
+          if (timeLeft === 10 && !announced10Sec) {
+            announced10Sec = true;
+            speak10SecondsLeft();
+          }
+
+          if (timeLeft <= 0) {
+            if (currentPhase === 'memorize') {
+              switchToFindPhase();
+            } else if (currentPhase === 'find') {
+              clearInterval(timerInterval);
+              endCurrentRound();
+            }
+          }
+        }, 1000);
+        updateTimerHUD();
+      }
+
+      function switchToFindPhase() {
+        currentPhase = 'find';
+        timeLeft = PHASE2_TIME;
+        announced10Sec = false;
+        const totalDiffs = roundSceneData.differences.length;
+        const stageName = roundSceneData.stage.name;
+        document.getElementById('phase-banner').innerText =
+          role === 'student'
+            ? `🔍 [달라진 그림 · ${stageName}] 40초 안에 달라진 곳 ${totalDiffs}개를 찾으세요! (+1점 / 오답 -1점)`
+            : `🔍 [달라진 그림 · ${stageName}] ${totalDiffs}개의 차이점 탐색 중`;
+        updateTimerHUD();
+        renderSceneToContext(ctx, canvas.width, canvas.height, true, false);
+      }
+
+      function updateTimerHUD() {
+        const timerEl = document.getElementById('timer-display');
+        const boxEl = document.getElementById('timer-box');
+        timerEl.innerText = `${timeLeft}초`;
+        if (timeLeft <= 10) boxEl.classList.add('timer-warning');
+        else boxEl.classList.remove('timer-warning');
+      }
+
+      function updateTop5HUD() {
+        const sorted = Object.values(players).sort(
+          (a, b) => b.score - a.score || Number(a.num) - Number(b.num)
+        );
+        const top5 = sorted.slice(0, 5);
+        const listEl = document.getElementById('top5-list');
+        if (top5.length === 0) {
+          listEl.innerHTML = '<li>참가자 대기중...</li>';
+          return;
+        }
+        listEl.innerHTML = top5
+          .map((p, idx) => {
+            const flash = lastRankFlash[p.num];
+            const cls = flash === 'plus' ? 'rank-flash-plus' : flash === 'minus' ? 'rank-flash-minus' : '';
+            const medal = idx === 0 ? '👑' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}위`;
+            return `<li class="${cls}">
+              <span>${medal} ${p.num}번</span>
+              <span>${p.score}점</span>
+            </li>`;
+          })
+          .join('');
+
+        setTimeout(() => { lastRankFlash = {}; }, 600);
+      }
+
+      function updateStudentScoreText() {
+        const el = document.getElementById('student-score-status');
+        if (!roundSceneData) return;
+        if (role !== 'student') {
+          el.innerText = `HOST VIEW · ${roundSceneData.stage.name} (차이점 ${roundSceneData.differences.length}곳)`;
+          return;
+        }
+        const myScore = players[myStudentNum] ? players[myStudentNum].score : 0;
+        const total = roundSceneData.differences.length;
+        const sorted = Object.values(players).sort(
+          (a, b) => b.score - a.score || Number(a.num) - Number(b.num)
+        );
+        const myRank = sorted.findIndex((p) => p.score === myScore) + 1;
+        const penaltyBadge =
+          Date.now() - lastPenaltyTime < 1500
+            ? '<span style="color:#f87171; margin-left:8px;">❌ 오답! -1점</span>'
+            : '';
+        el.innerHTML = `${myStudentNum}번 | 찾음: ${foundDiffIds.size}/${total} | 점수: <span style="color:#fde047;">${myScore}점</span> (${myRank}위) ${penaltyBadge}`;
+      }
+
+      function endCurrentRound() {
+        currentPhase = 'result';
+        renderSceneToContext(ctx, canvas.width, canvas.height, true, true);
+        if (role === 'admin') {
+          broadcastToAllStudents({ type: 'ROUND_END', players: players });
+        }
+        showRoundResultModal();
+      }
+
+      function renderComparisonCanvas() {
+        const compCanvas = document.getElementById('compare-canvas');
+        const cctx = compCanvas.getContext('2d');
+        const halfW = 450;
+        const h = 270;
+
+        cctx.fillStyle = '#090c14';
+        cctx.fillRect(0, 0, compCanvas.width, compCanvas.height);
+
+        const offOrig = document.createElement('canvas');
+        offOrig.width = 900;
+        offOrig.height = 540;
+        renderSceneToContext(offOrig.getContext('2d'), 900, 540, false, false);
+        cctx.drawImage(offOrig, 4, 2, halfW, h);
+
+        const offMod = document.createElement('canvas');
+        offMod.width = 900;
+        offMod.height = 540;
+        renderSceneToContext(offMod.getContext('2d'), 900, 540, true, true);
+        cctx.drawImage(offMod, halfW + 16, 2, halfW, h);
+
+        cctx.fillStyle = '#eab308';
+        cctx.fillRect(halfW + 4, 0, 12, compCanvas.height);
+      }
+
+      function showRoundResultModal() {
+        const modal = document.getElementById('round-modal');
+        modal.classList.remove('hidden');
+
+        const isFinal = currentRound >= TOTAL_ROUNDS;
+        document.getElementById('modal-title').innerText = isFinal
+          ? '🎊 최종 10라운드 종료! 최종 결과 및 정답 비교 🎊'
+          : `⏱️ ROUND ${String(currentRound).padStart(2, '0')} 종료! 정답 비교`;
+
+        document.getElementById('modal-diff-count').innerText = roundSceneData
+          ? roundSceneData.differences.length
+          : 0;
+
+        renderComparisonCanvas();
+
+        const sorted = Object.values(players).sort(
+          (a, b) => b.score - a.score || Number(a.num) - Number(b.num)
+        );
+
+        const myRankBox = document.getElementById('my-rank-box');
+        if (role === 'student' && players[myStudentNum]) {
+          const myScore = players[myStudentNum].score;
+          const myRank = sorted.findIndex((p) => p.score === myScore) + 1;
+          myRankBox.classList.remove('hidden');
+          myRankBox.innerText = `🏅 ${myStudentNum}번 현재 순위: 전체 ${sorted.length}명 중 ${myRank}위 (${myScore}점)`;
+        } else {
+          myRankBox.classList.add('hidden');
+        }
+
+        const tbody = document.getElementById('modal-rank-body');
+        tbody.innerHTML = sorted
+          .map((p) => {
+            const rank = sorted.findIndex((item) => item.score === p.score) + 1;
+            const isMe = role === 'student' && p.num === myStudentNum;
+            return `<tr style="${isMe ? 'background:rgba(234,179,8,0.18); color:#fde047; font-weight:900;' : ''}">
+              <td>${rank}위</td>
+              <td>${p.num}번</td>
+              <td>${p.score}점</td>
+            </tr>`;
+          })
+          .join('');
+
+        if (role === 'admin') {
+          document.getElementById('admin-next-controls').classList.remove('hidden');
+          document.getElementById('student-wait-next').classList.add('hidden');
+          const nextBtn = document.getElementById('btn-next-round');
+          nextBtn.innerText = isFinal
+            ? '새 매치 시작 (처음으로)'
+            : `다음 라운드 시작 (ROUND ${String(currentRound + 1).padStart(2, '0')}) ▶`;
+        } else {
+          document.getElementById('admin-next-controls').classList.add('hidden');
+          document.getElementById('student-wait-next').classList.remove('hidden');
+          if (isFinal) {
+            document.getElementById('student-wait-next').innerText = '모든 라운드가 종료되었습니다.';
+          }
+        }
+      }
+
+      function exportResultsCSV() {
+        const sorted = Object.values(players).sort(
+          (a, b) => b.score - a.score || Number(a.num) - Number(b.num)
+        );
+        let csv = '\uFEFF등수,학생번호,점수\n';
+        sorted.forEach((p) => {
+          const rank = sorted.findIndex((item) => item.score === p.score) + 1;
+          csv += `${rank},${p.num}번,${p.score}\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `데블스플랜_틀린그림찾기_${currentRound}라운드_결과.csv`;
+        link.click();
+      }
+
+      canvas.addEventListener('pointerdown', (e) => {
+        if (currentPhase !== 'find' || !roundSceneData) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+
+        let hit = false;
+        let alreadyFoundClick = false;
+
+        for (const diff of roundSceneData.differences) {
+          const dist = Math.hypot(x - diff.x, y - diff.y);
+          if (dist <= diff.radius + 14) {
+            if (foundDiffIds.has(diff.id)) {
+              alreadyFoundClick = true;
+              break;
+            }
+            foundDiffIds.add(diff.id);
+            hit = true;
+            if (role === 'student' && myStudentNum && players[myStudentNum]) {
+              players[myStudentNum].score += 1;
+              lastRankFlash[myStudentNum] = 'plus';
+              updateTop5HUD();
+              sendToAdmin({ type: 'SCORE_DELTA', studentNum: myStudentNum, delta: 1 });
+            }
+            updateStudentScoreText();
+            break;
+          }
+        }
+
+        if (!hit && !alreadyFoundClick) {
+          wrongClicks.push({ x: x, y: y, created: Date.now() });
+          if (role === 'student' && myStudentNum && players[myStudentNum]) {
+            players[myStudentNum].score -= 1;
+            lastRankFlash[myStudentNum] = 'minus';
+            lastPenaltyTime = Date.now();
+            updateTop5HUD();
+            sendToAdmin({ type: 'SCORE_DELTA', studentNum: myStudentNum, delta: -1 });
+          }
+          updateStudentScoreText();
+        }
+        renderSceneToContext(ctx, canvas.width, canvas.height, true, false);
+      });
+
+      /* =========================================================================
+         3. 첨부 그림체(굵고 깔끔한 잉크 아웃라인 #1f1f24 + 플랫 컬러 + 별자리 점선 + 위트 소품)
+            + 매 라운드 확연히 다른 배경 무대와 크고 개성 있는 캐릭터/오브젝트 구성
+         ========================================================================= */
+      function seededRandom(seed) {
+        let s = seed % 2147483647;
+        if (s <= 0) s += 2147483646;
+        return () => (s = (s * 16807) % 2147483647) / 2147483647;
+      }
+
+      const STAGES = [
+        {
+          id: 'starlight_camp',
+          name: '별빛 캠핑장',
+          skyTop: '#242954',
+          skyBot: '#2e3569',
+          groundTop: '#96b95f',
+          groundBot: '#82a34e',
+          constellationStyle: 'camp',
+          objects: [
+            { kind: 'tent', x: 450, y: 215, radius: 75, altColor: '#3b82f6' },
+            { kind: 'sleeping_camper', x: 350, y: 280, radius: 58, altHeadgear: 'pink_ribbon' },
+            { kind: 'bucket_ball', x: 165, y: 282, radius: 44, altBall: 'globe' },
+            { kind: 'camp_boots', x: 635, y: 285, radius: 44, altColor: '#38bdf8' },
+            { kind: 'camp_light', x: 755, y: 295, radius: 40, altLight: 'candle' },
+            { kind: 'picnic_table', x: 420, y: 392, radius: 66, altFood: 'burger_donut' },
+            { kind: 'campfire', x: 170, y: 382, radius: 42, altColor: '#38bdf8' },
+            { kind: 'signpost', x: 775, y: 405, radius: 52, altSign: 'alt_arrows' },
+            { kind: 'boxing_capybaras', x: 445, y: 472, radius: 78, altGesture: 'finger_heart' }
+          ]
+        },
+        {
+          id: 'arcade_lounge',
+          name: '네온 아케이드 라운지',
+          skyTop: '#1e1b4b',
+          skyBot: '#312e81',
+          groundTop: '#475569',
+          groundBot: '#334155',
+          constellationStyle: 'arcade',
+          objects: [
+            { kind: 'arcade_cabinet', x: 215, y: 225, radius: 62, altColor: '#f43f5e' },
+            { kind: 'jukebox_tv', x: 455, y: 215, radius: 64, altScreen: 'heart_wave' },
+            { kind: 'soda_cooler', x: 695, y: 230, radius: 54, altColor: '#facc15' },
+            { kind: 'deadpan_cat', x: 265, y: 375, radius: 54, altHeadgear: 'crown_cap' },
+            { kind: 'sloth_gamer', x: 475, y: 380, radius: 56, altGesture: 'thumbs_up' },
+            { kind: 'frog_dj', x: 685, y: 375, radius: 54, altColor: '#fb7185' },
+            { kind: 'signpost', x: 115, y: 415, radius: 50, altSign: 'arcade_sign' },
+            { kind: 'trophy_table', x: 475, y: 485, radius: 58, altFood: 'pizza_slice' }
+          ]
+        },
+        {
+          id: 'deep_sub',
+          name: '심해 잠수함 연구실',
+          skyTop: '#0f2942',
+          skyBot: '#163d5e',
+          groundTop: '#2b5876',
+          groundBot: '#1e425c',
+          constellationStyle: 'bubbles',
+          objects: [
+            { kind: 'porthole_whale', x: 450, y: 190, radius: 68, altCreature: 'octopus' },
+            { kind: 'oxygen_tank', x: 180, y: 255, radius: 48, altColor: '#f97316' },
+            { kind: 'sonar_console', x: 710, y: 255, radius: 54, altScreen: 'alert_red' },
+            { kind: 'diver_dude', x: 310, y: 375, radius: 56, altHeadgear: 'pink_ribbon' },
+            { kind: 'penguin_tech', x: 560, y: 375, radius: 56, altGesture: 'salute' },
+            { kind: 'treasure_chest', x: 750, y: 430, radius: 52, altOpen: true },
+            { kind: 'signpost', x: 135, y: 420, radius: 50, altSign: 'depth_sign' },
+            { kind: 'coral_buddies', x: 440, y: 482, radius: 64, altColor: '#ec4899' }
+          ]
+        },
+        {
+          id: 'desert_oasis',
+          name: '사막 오아시스 야영지',
+          skyTop: '#3b2852',
+          skyBot: '#5c3a63',
+          groundTop: '#dfb978',
+          groundBot: '#cba15c',
+          constellationStyle: 'camp',
+          objects: [
+            { kind: 'oasis_palm', x: 205, y: 225, radius: 62, altColor: '#38bdf8' },
+            { kind: 'camel_pal', x: 465, y: 235, radius: 66, altHeadgear: 'pink_ribbon' },
+            { kind: 'cactus_duo', x: 715, y: 240, radius: 54, altColor: '#f472b6' },
+            { kind: 'nomad_napper', x: 335, y: 375, radius: 56, altGesture: 'peace_sign' },
+            { kind: 'magic_lamp', x: 585, y: 375, radius: 48, altColor: '#ef4444' },
+            { kind: 'signpost', x: 775, y: 405, radius: 52, altSign: 'oasis_sign' },
+            { kind: 'amphora_pot', x: 155, y: 425, radius: 46, altColor: '#22c55e' },
+            { kind: 'meerkat_pair', x: 455, y: 480, radius: 68, altGesture: 'finger_heart' }
+          ]
+        },
+        {
+          id: 'rooftop_night',
+          name: '별밤 옥상 루프탑',
+          skyTop: '#1b1d36',
+          skyBot: '#292d52',
+          groundTop: '#64748b',
+          groundBot: '#475569',
+          constellationStyle: 'camp',
+          objects: [
+            { kind: 'telescope_rig', x: 220, y: 225, radius: 62, altColor: '#facc15' },
+            { kind: 'bbq_grill', x: 465, y: 235, radius: 60, altFood: 'corn_skewer' },
+            { kind: 'beanbag_chill', x: 705, y: 245, radius: 56, altColor: '#fb7185' },
+            { kind: 'rooftop_buddy', x: 325, y: 375, radius: 56, altHeadgear: 'pink_ribbon' },
+            { kind: 'owl_critic', x: 565, y: 375, radius: 56, altGesture: 'wave_hand' },
+            { kind: 'signpost', x: 775, y: 405, radius: 52, altSign: 'rooftop_sign' },
+            { kind: 'cooler_box', x: 155, y: 425, radius: 46, altColor: '#38bdf8' },
+            { kind: 'shiba_duel', x: 450, y: 480, radius: 70, altGesture: 'finger_heart' }
+          ]
+        }
+      ];
+
+      function generateIllustratedStageScene(round) {
+        const rand = seededRandom(Date.now() + round * 3137);
+        const stage = STAGES[(round - 1) % STAGES.length];
+
+        // 라운드가 진행될수록 선택 가능한 차이점 개수 증가 (5개 -> 8개)
+        const desiredDiffs = Math.min(8, 4 + Math.ceil(round / 2));
+        const shuffled = [...stage.objects].sort(() => rand() - 0.5);
+        const picked = shuffled.slice(0, desiredDiffs);
+
+        const differences = picked.map((obj, idx) => {
+          let mode = 'alt_state';
+          if (obj.altColor && idx % 2 === 1) mode = 'alt_color';
+          return {
+            id: obj.kind + '_' + idx,
+            kind: obj.kind,
+            x: obj.x,
+            y: obj.y,
+            radius: obj.radius || 52,
+            mode: mode
+          };
+        });
+
+        return {
+          round,
+          stage,
+          differences,
+          starShift: rand() > 0.5
+        };
+      }
+
+      function renderSceneToContext(targetCtx, width, height, isModified, showAllAnswers) {
+        if (!roundSceneData) return;
+        const { stage, differences, starShift } = roundSceneData;
+        const diffMap = new Map(differences.map((d) => [d.kind, d]));
+
+        targetCtx.save();
+        targetCtx.lineCap = 'round';
+        targetCtx.lineJoin = 'round';
+
+        // 상단 하늘 그라데이션 (첨부 그림 스타일)
+        const skyGrad = targetCtx.createLinearGradient(0, 0, 0, 275);
+        skyGrad.addColorStop(0, stage.skyTop);
+        skyGrad.addColorStop(1, stage.skyBot);
+        targetCtx.fillStyle = skyGrad;
+        targetCtx.fillRect(0, 0, width, 275);
+
+        // 하단 지면/플로어
+        const gndGrad = targetCtx.createLinearGradient(0, 260, 0, height);
+        gndGrad.addColorStop(0, stage.groundTop);
+        gndGrad.addColorStop(1, stage.groundBot);
+        targetCtx.fillStyle = gndGrad;
+        targetCtx.fillRect(0, 260, width, height - 260);
+
+        // 지면 경계 잉크 라인
+        targetCtx.strokeStyle = '#1f1f24';
+        targetCtx.lineWidth = 3;
+        targetCtx.beginPath();
+        targetCtx.moveTo(0, 260);
+        targetCtx.lineTo(width, 260);
+        targetCtx.stroke();
+
+        // 상단 별자리 & 반짝이 (첨부 그림의 점선 별자리 디테일)
+        drawConstellations(targetCtx, width, stage.constellationStyle, isModified && starShift);
+
+        // 각 대형 오브젝트/캐릭터 그리기
+        const sortedObjs = [...stage.objects].sort((a, b) => a.y - b.y);
+        for (const obj of sortedObjs) {
+          const diff = isModified ? diffMap.get(obj.kind) : null;
+          drawStageObject(targetCtx, obj, diff);
+        }
+
+        // 정답 원 표시 (찾은 정답: 빨간 실선 / 놓친 정답: 파란 점선)
+        differences.forEach((diff) => {
+          if (foundDiffIds.has(diff.id)) {
+            targetCtx.save();
+            targetCtx.strokeStyle = '#ef4444';
+            targetCtx.lineWidth = 5;
+            targetCtx.beginPath();
+            targetCtx.arc(diff.x, diff.y, diff.radius, 0, Math.PI * 2);
+            targetCtx.stroke();
+            targetCtx.restore();
+          } else if (showAllAnswers) {
+            targetCtx.save();
+            targetCtx.strokeStyle = '#38bdf8';
+            targetCtx.setLineDash([8, 6]);
+            targetCtx.lineWidth = 4.5;
+            targetCtx.beginPath();
+            targetCtx.arc(diff.x, diff.y, diff.radius, 0, Math.PI * 2);
+            targetCtx.stroke();
+            targetCtx.restore();
+          }
+        });
+
+        // 오답 X 표시
+        if (!showAllAnswers) {
+          const now = Date.now();
+          wrongClicks = wrongClicks.filter((w) => now - w.created < 650);
+          wrongClicks.forEach((w) => {
+            targetCtx.save();
+            targetCtx.strokeStyle = '#ef4444';
+            targetCtx.lineWidth = 5;
+            targetCtx.beginPath();
+            targetCtx.moveTo(w.x - 14, w.y - 14);
+            targetCtx.lineTo(w.x + 14, w.y + 14);
+            targetCtx.moveTo(w.x + 14, w.y - 14);
+            targetCtx.lineTo(w.x - 14, w.y + 14);
+            targetCtx.stroke();
+            targetCtx.restore();
+          });
+        }
+
+        targetCtx.restore();
+      }
+
+      function drawStar4(c, x, y, r, color) {
+        c.save();
+        c.fillStyle = color || '#fde047';
+        c.beginPath();
+        c.moveTo(x, y - r);
+        c.quadraticCurveTo(x, y, x + r, y);
+        c.quadraticCurveTo(x, y, x, y + r);
+        c.quadraticCurveTo(x, y, x - r, y);
+        c.quadraticCurveTo(x, y, x, y - r);
+        c.fill();
+        c.restore();
+      }
+
+      function drawConstellations(c, width, style, shifted) {
+        c.save();
+        const dy = shifted ? 12 : 0;
+        drawStar4(c, 130, 58 + dy, 7, '#fde047');
+        drawStar4(c, 295, 76 - dy, 12, '#fde047');
+        drawStar4(c, 670, 68 + dy, 11, '#fde047');
+        drawStar4(c, 790, 95 - dy, 7, '#fde047');
+
+        c.strokeStyle = 'rgba(254, 240, 138, 0.72)';
+        c.lineWidth = 1.8;
+        c.setLineDash([4, 5]);
+        c.beginPath();
+        c.moveTo(225, 92);
+        c.lineTo(295, 76 - dy);
+        c.lineTo(355, 118);
+        c.lineTo(225, 92);
+        c.stroke();
+
+        c.beginPath();
+        c.moveTo(670, 68 + dy);
+        c.lineTo(755, 68 + dy);
+        c.lineTo(790, 95 - dy);
+        c.stroke();
+        c.restore();
+      }
+
+      function drawDeadpanFace(c, x, y, scale, expression) {
+        c.save();
+        c.translate(x, y);
+        c.scale(scale, scale);
+        c.strokeStyle = '#1f1f24';
+        c.fillStyle = '#1f1f24';
+        c.lineWidth = 2.4;
+
+        // 큰 눈자위 + 작은 눈동자 (첨부 그림 특유의 시니컬/덤덤한 표정)
+        c.fillStyle = '#ffffff';
+        c.beginPath();
+        c.arc(-9, -2, 6, 0, Math.PI * 2);
+        c.arc(9, -2, 6, 0, Math.PI * 2);
+        c.fill();
+        c.stroke();
+
+        c.fillStyle = '#1f1f24';
+        c.beginPath();
+        c.arc(-8, -2, 2.2, 0, Math.PI * 2);
+        c.arc(8, -2, 2.2, 0, Math.PI * 2);
+        c.fill();
+
+        // 코 & 입
+        c.beginPath();
+        c.arc(0, 4, 2, 0, Math.PI * 2);
+        c.fill();
+
+        if (expression === 'grin') {
+          c.beginPath();
+          c.arc(0, 9, 6, 0, Math.PI);
+          c.stroke();
+        } else {
+          c.beginPath();
+          c.moveTo(-4, 11);
+          c.lineTo(4, 11);
+          c.stroke();
+        }
+        c.restore();
+      }
+
+      function drawStageObject(c, obj, diff) {
+        const isAlt = Boolean(diff);
+        const { kind, x, y } = obj;
+        c.save();
+        c.strokeStyle = '#1f1f24';
+        c.lineWidth = 3;
+
+        if (kind === 'tent') {
+          const mainCol = isAlt && diff.mode === 'alt_color' ? obj.altColor : '#58a86e';
+          c.fillStyle = mainCol;
+          c.beginPath();
+          c.moveTo(x, y - 92);
+          c.lineTo(x - 135, y + 65);
+          c.lineTo(x + 135, y + 65);
+          c.closePath();
+          c.fill();
+          c.stroke();
+
+          // 텐트 입구 어두운 삼각형
+          c.fillStyle = '#244a2f';
+          c.beginPath();
+          c.moveTo(x, y - 10);
+          c.lineTo(x - 42, y + 65);
+          c.lineTo(x + 88, y + 65);
+          c.closePath();
+          c.fill();
+          c.stroke();
+
+          // 걸려있는 전구
+          c.strokeStyle = '#1f1f24';
+          c.beginPath();
+          c.moveTo(x, y - 82);
+          c.lineTo(x + 22, y - 22);
+          c.stroke();
+          c.fillStyle = isAlt ? '#fef08a' : '#fff59d';
+          c.beginPath();
+          c.arc(x + 22, y - 10, 17, 0, Math.PI * 2);
+          c.fill();
+          c.stroke();
+        } else if (kind === 'sleeping_camper') {
+          // 침낭 몸통
+          c.fillStyle = isAlt && diff.mode === 'alt_color' ? '#93c5fd' : '#8d99a6';
+          c.beginPath();
+          c.roundRect(x - 125, y - 24, 150, 56, 26);
+          c.fill();
+          c.stroke();
+
+          // 얼굴
+          c.fillStyle = '#f8d7be';
+          c.beginPath();
+          c.arc(x + 45, y + 4, 25, 0, Math.PI * 2);
+          c.fill();
+          c.stroke();
+          drawDeadpanFace(c, x + 50, y + 4, 1.05, 'deadpan');
+
+          // 모자 <-> 분홍 리본 스왑!
+          if (isAlt && obj.altHeadgear === 'pink_ribbon') {
+            c.fillStyle = '#f9a8d4';
+            c.beginPath();
+            c.ellipse(x + 28, y - 16, 15, 9, -0.4, 0, Math.PI * 2);
+            c.ellipse(x + 62, y - 16, 15, 9, 0.4, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+            c.beginPath();
+            c.arc(x + 45, y - 16, 6, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+          } else {
+            c.fillStyle = '#fef08a';
+            c.beginPath();
+            c.arc(x + 45, y - 8, 22, Math.PI, 0);
+            c.fill();
+            c.stroke();
+            c.fillStyle = '#3b82f6';
+            c.fillRect(x + 32, y - 22, 16, 11);
+            c.strokeRect(x + 32, y - 22, 16, 11);
+          }
+        } else if (kind === 'bucket_ball') {
+          // 양동이
+          c.fillStyle = '#d1d5db';
+          c.beginPath();
+          c.moveTo(x - 28, y - 4);
+          c.lineTo(x + 28, y - 4);
+          c.lineTo(x + 22, y + 36);
+          c.lineTo(x - 22, y + 36);
+          c.closePath();
+          c.fill();
+          c.stroke();
+
+          // 농구공 <-> 지구본 스왑!
+          if (isAlt && obj.altBall === 'globe') {
+            c.fillStyle = '#38bdf8';
+            c.beginPath();
+            c.arc(x, y - 18, 25, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+            c.fillStyle = '#86efac';
+            c.beginPath();
+            c.arc(x - 7, y - 22, 9, 0, Math.PI * 2);
+            c.arc(x + 8, y - 12, 8, 0, Math.PI * 2);
+            c.fill();
+          } else {
+            c.fillStyle = '#ea580c';
+            c.beginPath();
+            c.arc(x, y - 18, 25, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+            c.beginPath();
+            c.moveTo(x - 25, y - 18);
+            c.lineTo(x + 25, y - 18);
+            c.moveTo(x, y - 43);
+            c.lineTo(x, y + 7);
+            c.stroke();
+          }
+        } else if (kind === 'camp_boots') {
+          const bootCol = isAlt && diff.mode === 'alt_color' ? obj.altColor : '#b47b44';
+          c.fillStyle = bootCol;
+          c.beginPath();
+          c.roundRect(x - 28, y - 22, 24, 36, 5);
+          c.roundRect(x - 36, y + 4, 34, 14, 5);
+          c.fill();
+          c.stroke();
+
+          c.beginPath();
+          c.roundRect(x + 4, y - 18, 24, 36, 5);
+          c.roundRect(x - 4, y + 8, 34, 14, 5);
+          c.fill();
+          c.stroke();
+        } else if (kind === 'camp_light') {
+          // 그루터기
+          c.fillStyle = '#c48b69';
+          c.beginPath();
+          c.ellipse(x, y + 16, 30, 12, 0, 0, Math.PI * 2);
+          c.fill();
+          c.stroke();
+
+          if (isAlt && obj.altLight === 'candle') {
+            // 촛불
+            c.fillStyle = '#facc15';
+            c.fillRect(x - 8, y - 16, 16, 26);
+            c.strokeRect(x - 8, y - 16, 16, 26);
+            c.fillStyle = '#ef4444';
+            c.beginPath();
+            c.ellipse(x, y - 24, 6, 10, 0, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+          } else {
+            // 핑크 캠핑 랜턴
+            c.fillStyle = '#fda4af';
+            c.beginPath();
+            c.roundRect(x - 14, y - 16, 28, 26, 6);
+            c.fill();
+            c.stroke();
+            c.fillStyle = '#ffffff';
+            c.fillRect(x - 8, y - 10, 16, 14);
+          }
+        } else if (kind === 'picnic_table') {
+          // 컬러 블록 다리 + 나무 상판
+          c.fillStyle = '#ef4444';
+          c.fillRect(x - 68, y + 2, 26, 24);
+          c.strokeRect(x - 68, y + 2, 26, 24);
+          c.fillStyle = '#facc15';
+          c.fillRect(x - 68, y - 12, 26, 14);
+          c.strokeRect(x - 68, y - 12, 26, 14);
+          c.fillStyle = '#60a5fa';
+          c.fillRect(x + 22, y - 12, 28, 28);
+          c.strokeRect(x + 22, y - 12, 28, 28);
+
+          c.fillStyle = '#d48c70';
+          c.beginPath();
+          c.moveTo(x - 85, y - 24);
+          c.lineTo(x + 65, y - 24);
+          c.lineTo(x + 85, y - 8);
+          c.lineTo(x - 65, y - 8);
+          c.closePath();
+          c.fill();
+          c.stroke();
+
+          // 테이블 위 음식 스왑 (핫도그/빵 <-> 버거/도넛)
+          if (isAlt && obj.altFood === 'burger_donut') {
+            c.fillStyle = '#f472b6';
+            c.beginPath();
+            c.arc(x - 25, y - 18, 11, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+            c.fillStyle = '#f59e0b';
+            c.beginPath();
+            c.arc(x + 22, y - 18, 12, Math.PI, 0);
+            c.fill();
+            c.stroke();
+          } else {
+            c.fillStyle = '#fde047';
+            c.beginPath();
+            c.roundRect(x - 35, y - 24, 34, 11, 5);
+            c.fill();
+            c.stroke();
+            c.fillStyle = '#a16207';
+            c.beginPath();
+            c.ellipse(x + 22, y - 18, 14, 9, 0, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+          }
+        } else if (kind === 'campfire') {
+          c.fillStyle = '#eab308';
+          c.beginPath();
+          c.roundRect(x - 24, y + 6, 48, 10, 5);
+          c.fill();
+          c.stroke();
+          c.fillStyle = isAlt && diff.mode === 'alt_color' ? obj.altColor : '#fb7185';
+          c.beginPath();
+          c.moveTo(x, y - 28);
+          c.lineTo(x - 18, y + 6);
+          c.lineTo(x + 18, y + 6);
+          c.closePath();
+          c.fill();
+          c.stroke();
+        } else if (kind === 'signpost') {
+          // 기둥
+          c.fillStyle = '#9c6644';
+          c.fillRect(x - 5, y - 38, 10, 82);
+          c.strokeRect(x - 5, y - 38, 10, 82);
+
+          // 위 표지판 ("싸우지" -> 방향/문구 변화)
+          const topDir = isAlt ? -1 : 1;
+          c.fillStyle = '#e6b89c';
+          c.beginPath();
+          c.roundRect(x - 36, y - 32, 76, 22, 4);
+          c.fill();
+          c.stroke();
+          c.fillStyle = '#1f1f24';
+          c.font = '900 12px Pretendard, sans-serif';
+          c.textAlign = 'center';
+          c.fillText(isAlt && topDir < 0 ? '◀ 싸우지' : '싸우지 ▶', x + 2, y - 17);
+
+          // 아래 표지판 ("마시오")
+          c.fillStyle = isAlt ? '#fde047' : '#e6b89c';
+          c.beginPath();
+          c.roundRect(x - 42, y - 4, 80, 22, 4);
+          c.fill();
+          c.stroke();
+          c.fillStyle = '#1f1f24';
+          c.fillText(isAlt ? '화해하시오 ▶' : '◀ 마시오', x - 2, y + 11);
+        } else if (kind === 'boxing_capybaras') {
+          // 좌우 카피바라 캐릭터
+          c.fillStyle = '#c49365';
+          c.beginPath();
+          c.ellipse(x - 75, y + 6, 56, 36, -0.22, 0, Math.PI * 2);
+          c.ellipse(x + 75, y + 6, 56, 36, 0.22, 0, Math.PI * 2);
+          c.fill();
+          c.stroke();
+
+          // 카피바라 귀 & 뺨
+          c.fillStyle = '#9c6644';
+          c.beginPath();
+          c.arc(x - 52, y - 28, 8, 0, Math.PI * 2);
+          c.arc(x + 52, y - 28, 8, 0, Math.PI * 2);
+          c.fill();
+          c.stroke();
+
+          c.fillStyle = '#fda4af';
+          c.beginPath();
+          c.ellipse(x - 58, y - 6, 8, 4, 0, 0, Math.PI * 2);
+          c.ellipse(x + 58, y - 6, 8, 4, 0, 0, Math.PI * 2);
+          c.fill();
+
+          // 복싱 글러브 <-> 손가락 하트 스왑!
+          if (isAlt && obj.altGesture === 'finger_heart') {
+            c.fillStyle = '#fde047';
+            c.beginPath();
+            c.roundRect(x - 36, y - 12, 24, 14, 5);
+            c.roundRect(x + 12, y - 12, 24, 14, 5);
+            c.fill();
+            c.stroke();
+
+            c.fillStyle = '#f8d7be';
+            c.beginPath();
+            c.arc(x - 10, y - 6, 11, 0, Math.PI * 2);
+            c.arc(x + 10, y - 6, 11, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+
+            // 중앙 핑크 하트
+            c.fillStyle = '#f472b6';
+            c.beginPath();
+            c.arc(x, y - 26, 9, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+          } else {
+            c.fillStyle = '#ef4444';
+            c.beginPath();
+            c.arc(x - 20, y + 2, 18, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+
+            c.fillStyle = '#2563eb';
+            c.beginPath();
+            c.arc(x + 16, y + 6, 18, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+          }
+        } else {
+          // 다른 무대(아케이드/심해/사막/루프탑)의 대형 개성 캐릭터 & 오브젝트
+          const baseCol = isAlt && diff.mode === 'alt_color' ? obj.altColor || '#f472b6' : '#60a5fa';
+          c.fillStyle = baseCol;
+          c.beginPath();
+          c.roundRect(x - 42, y - 34, 84, 68, 18);
+          c.fill();
+          c.stroke();
+
+          c.fillStyle = '#f8d7be';
+          c.beginPath();
+          c.arc(x, y - 6, 24, 0, Math.PI * 2);
+          c.fill();
+          c.stroke();
+          drawDeadpanFace(c, x, y - 6, 1.05, isAlt ? 'grin' : 'deadpan');
+
+          // 상태 변화 표시 (모자/리본/제스처 변화)
+          if (isAlt) {
+            c.fillStyle = '#fde047';
+            c.beginPath();
+            c.arc(x, y - 36, 12, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+          }
+        }
+
+        c.restore();
+      }
+
+      function bindEvents() {
+        document.getElementById('btn-role-admin').addEventListener('click', initAdmin);
+        document.getElementById('btn-role-student').addEventListener('click', showStudentJoin);
+        document.getElementById('btn-add-demo-students').addEventListener('click', addDemoStudents);
+        document.getElementById('btn-start-game').addEventListener('click', startGame);
+        document.getElementById('btn-admin-reset').addEventListener('click', resetToHome);
+        document.getElementById('btn-join-room').addEventListener('click', joinRoom);
+        document.getElementById('btn-join-back').addEventListener('click', () => showScreen('screen-home'));
+        document.getElementById('btn-next-round').addEventListener('click', nextRound);
+        document.getElementById('btn-export-csv').addEventListener('click', exportResultsCSV);
+
+        const updateQrBtn = document.getElementById('btn-update-qr-url');
+        if (updateQrBtn) {
+          updateQrBtn.addEventListener('click', () => {
+            const val = document.getElementById('custom-host-url').value.trim();
+            if (val && roomCode) renderRoomQR(roomCode, val);
+          });
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomParam = urlParams.get('room');
+        if (roomParam) {
+          showStudentJoin();
+          document.getElementById('input-room-code').value = roomParam.toUpperCase();
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bindEvents);
+      } else {
+        bindEvents();
+      }
+    })();
+  </script>
+</body>
+</html>
