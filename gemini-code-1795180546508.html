@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>실시간 틀린그림찾기 클래스</title>
+  <!-- QR코드 생성 및 P2P 실시간 통신 라이브러리 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --text: #1f2937;
+      --danger: #ef4444;
+      --success: #10b981;
+    }
+    * { box-sizing: border-box; font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text); display: flex; flex-direction: column; min-height: 100vh; }
+    
+    /* 공통 UI */
+    .container { max-width: 1100px; margin: 0 auto; padding: 20px; width: 100%; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+    .card { background: var(--card); border-radius: 16px; padding: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); text-align: center; }
+    h1, h2, h3 { margin-top: 0; }
+    .btn { background: var(--primary); color: white; border: none; padding: 14px 28px; font-size: 1.1rem; font-weight: 700; border-radius: 10px; cursor: pointer; transition: 0.2s; margin: 5px; }
+    .btn:hover { background: var(--primary-hover); transform: translateY(-2px); }
+    .btn:disabled { background: #9ca3af; cursor: not-allowed; transform: none; }
+    .btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
+    .btn-outline:hover { background: #eef2ff; }
+    input { padding: 12px 16px; font-size: 1.1rem; border: 2px solid #d1d5db; border-radius: 10px; width: 100%; max-width: 300px; margin-bottom: 15px; text-align: center; }
+    .hidden { display: none !important; }
+
+    /* 상단 HUD (타이머 & 랭킹) */
+    #hud { position: fixed; top: 0; left: 0; right: 0; pointer-events: none; z-index: 100; display: flex; justify-content: space-between; padding: 15px 25px; }
+    .timer-box { background: rgba(17, 24, 39, 0.9); color: white; padding: 12px 24px; border-radius: 14px; font-size: 1.5rem; font-weight: 800; box-shadow: 0 4px 12px rgba(0,0,0,0.2); pointer-events: auto; display: flex; align-items: center; gap: 10px; }
+    .timer-warning { background: var(--danger) !important; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+
+    .ranking-box { background: rgba(255, 255, 255, 0.95); border: 2px solid var(--primary); padding: 12px 18px; border-radius: 14px; min-width: 220px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); pointer-events: auto; }
+    .ranking-box h4 { margin: 0 0 8px 0; color: var(--primary); font-size: 1rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+    .rank-list { list-style: none; padding: 0; margin: 0; font-size: 0.95rem; }
+    .rank-list li { display: flex; justify-content: space-between; padding: 3px 0; font-weight: 600; }
+    .rank-list li:first-child { color: #d97706; font-weight: 800; }
+
+    /* 대기실 QR & 참가자 목록 */
+    .lobby-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; align-items: center; margin-top: 20px; }
+    #qrcode { display: flex; justify-content: center; padding: 15px; background: white; border-radius: 12px; border: 2px dashed #cbd5e1; width: fit-content; margin: 0 auto; }
+    .player-badges { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-height: 250px; overflow-y: auto; padding: 10px; background: #f8fafc; border-radius: 12px; }
+    .badge { background: #e0e7ff; color: #3730a3; padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 0.95rem; }
+
+    /* 게임 캔버스 영역 */
+    #game-area { margin-top: 70px; display: flex; flex-direction: column; align-items: center; }
+    .phase-banner { background: #1e293b; color: #fbbf24; padding: 10px 25px; border-radius: 30px; font-size: 1.25rem; font-weight: 800; margin-bottom: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
+    canvas { background: #ffffff; border-radius: 16px; box-shadow: 0 12px 30px rgba(0,0,0,0.15); max-width: 100%; height: auto; cursor: crosshair; touch-action: manipulation; }
+
+    /* 라운드 종료 결과 모달 */
+    #round-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+    .modal-content { background: white; padding: 35px; border-radius: 20px; max-width: 550px; width: 100%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+    .my-rank-highlight { background: #fef3c7; border: 2px solid #f59e0b; padding: 15px; border-radius: 12px; margin: 15px 0; font-size: 1.3rem; font-weight: 800; color: #b45309; }
+    .full-rank-table { width: 100%; border-collapse: collapse; margin-top: 15px; max-height: 220px; overflow-y: auto; display: block; }
+    .full-rank-table th, .full-rank-table td { padding: 8px 12px; border-bottom: 1px solid #e5e7eb; text-align: center; width: 33%; }
+
+    @media (max-width: 768px) {
+      .lobby-grid { grid-template-columns: 1fr; }
+      #hud { padding: 10px; }
+      .timer-box { font-size: 1.1rem; padding: 8px 14px; }
+      .ranking-box { min-width: 150px; padding: 8px 12px; font-size: 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 상단 HUD (규칙 8: 타이머 왼쪽 상단, 규칙 10: 실시간 상위 5위 오른쪽 상단) -->
+  <div id="hud" class="hidden">
+    <div class="timer-box" id="timer-box">
+      <span id="round-indicator">1 / 10 라운드</span>
+      <span>|</span>
+      <span id="timer-display">20초</span>
+    </div>
+    <div class="ranking-box">
+      <h4>🏆 실시간 TOP 5</h4>
+      <ul class="rank-list" id="top5-list">
+        <li>데이터 대기중...</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 1. 초기 역할 선택 화면 -->
+  <div class="container" id="screen-home">
+    <div class="card">
+      <h1>🔍 실시간 틀린그림찾기 클래스</h1>
+      <p style="color: #6b7280; margin-bottom: 25px;">총 10라운드 · 기억력 20초 + 찾기 40초 · 실시간 랭킹 대결</p>
+      <button class="btn" onclick="initAdmin()">👨‍🏫 관리자(선생님) 방 만들기</button>
+      <button class="btn btn-outline" onclick="showStudentJoin()">🎓 학생으로 참여하기</button>
+      <p style="font-size: 0.85rem; color: #9ca3af; margin-top: 20px;">* 같은 네트워크 또는 인터넷이 연결된 기기에서 QR코드로 바로 접속됩니다.</p>
+    </div>
+  </div>
+
+  <!-- 2. 관리자 대기실 (규칙 5: 방 생성 및 QR코드 표시) -->
+  <div class="container hidden" id="screen-admin-lobby">
+    <div class="card">
+      <h2>방이 생성되었습니다! 학생들을 초대하세요</h2>
+      <p>방 코드: <strong id="display-room-code" style="font-size: 1.4rem; color: var(--primary);">생성 중...</strong></p>
+      <div class="lobby-grid">
+        <div>
+          <div id="qrcode"></div>
+          <p style="font-size: 0.9rem; color: #6b7280; margin-top: 10px;">스마트폰/태블릿 카메라로 QR코드를 스캔하세요</p>
+        </div>
+        <div>
+          <h3>참여한 학생 (<span id="player-count">0</span>명)</h3>
+          <div class="player-badges" id="lobby-player-list"></div>
+        </div>
+      </div>
+      <div style="margin-top: 25px;">
+        <button class="btn" id="btn-start-game" onclick="startGame()" disabled>게임 시작하기 (1라운드)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 학생 입장 화면 (규칙 6: 본인 번호로 참여) -->
+  <div class="container hidden" id="screen-student-join">
+    <div class="card">
+      <h2>🎓 학생 입장</h2>
+      <p>방 코드를 확인하고 본인의 <strong>출석 번호</strong>를 입력하세요.</p>
+      <div>
+        <input type="text" id="input-room-code" placeholder="방 코드 (예: ROOM123)" />
+      </div>
+      <div>
+        <input type="number" id="input-student-num" placeholder="본인 번호 입력 (예: 15)" min="1" max="999" />
+      </div>
+      <button class="btn" id="btn-join-room" onclick="joinRoom()">방 입장하기</button>
+      <p id="join-status" style="color: var(--danger); font-weight: 600;"></p>
+    </div>
+  </div>
+
+  <!-- 4. 학생 대기 화면 -->
+  <div class="container hidden" id="screen-student-wait">
+    <div class="card">
+      <h2>입장 완료! 🎉</h2>
+      <p style="font-size: 1.3rem;">참가자: <strong id="my-badge-display" style="color: var(--primary);"></strong></p>
+      <p style="color: #6b7280;">선생님이 게임을 시작할 때까지 화면을 보고 기다려주세요.</p>
+      <div style="margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 12px; font-size: 0.95rem;">
+        💡 <strong>게임 방법:</strong><br/>
+        1. 먼저 <strong>원래 그림</strong>이 20초간 보입니다. 잘 기억하세요!<br/>
+        2. <strong>달라진 그림</strong>이 나오면 40초 동안 틀린 곳(6~8개)을 터치하세요!
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. 게임 플레이 화면 (규칙 1, 2, 3, 4) -->
+  <div class="container hidden" id="screen-game">
+    <div id="game-area">
+      <div class="phase-banner" id="phase-banner">👀 원래 그림을 잘 기억하세요! (20초)</div>
+      <canvas id="game-canvas" width="900" height="540"></canvas>
+      <p id="student-score-status" style="font-weight: 700; font-size: 1.1rem; margin-top: 10px;"></p>
+    </div>
+  </div>
+
+  <!-- 6. 라운드 종료 및 최종 결과 모달 (규칙 6, 11) -->
+  <div id="round-modal" class="hidden">
+    <div class="modal-content">
+      <h2 id="modal-title">1라운드 종료!</h2>
+      <div id="my-rank-box" class="my-rank-highlight hidden"></div>
+      <p id="modal-subtitle" style="color: #4b5563;">전체 학생 실시간 점수 현황</p>
+      <table class="full-rank-table">
+        <thead>
+          <tr><th>등수</th><th>번호</th><th>점수</th></tr>
+        </thead>
+        <tbody id="modal-rank-body"></tbody>
+      </table>
+      <div id="admin-next-controls" class="hidden" style="margin-top: 20px;">
+        <button class="btn" id="btn-next-round" onclick="nextRound()">다음 라운드 시작 ▶</button>
+      </div>
+      <p id="student-wait-next" class="hidden" style="margin-top: 15px; color: var(--primary); font-weight: 700;">
+        선생님이 다음 라운드를 준비 중입니다...
+      </p>
+    </div>
+  </div>
+
+<script>
+/**
+ * ============================================================================
+ * 전역 상태 및 설정 (규칙 1~13 반영)
+ * ============================================================================
+ */
+const TOTAL_ROUNDS = 10;       // 규칙 7: 총 10라운드
+const PHASE1_TIME = 20;        // 규칙 1: 원래 그림 20초 공개
+const PHASE2_TIME = 40;        // 규칙 2, 3: 달라진 그림 40초 동안 찾기
+
+let role = null;               // 'admin' | 'student'
+let peer = null;
+let roomCode = '';
+let connections = {};          // 관리자용: { studentNum: DataConnection }
+let adminConn = null;          // 학생용: 관리자와의 연결
+
+let myStudentNum = null;
+let players = {};              // { "1": { num: "1", score: 0 }, ... }
+
+let currentRound = 1;
+let currentPhase = 'idle';     // 'memorize' | 'find' | 'result'
+let timeLeft = 0;
+let timerInterval = null;
+let announced10Sec = false;
+
+let roundSceneData = null;     // 현재 라운드 그림 & 정답 데이터
+let foundDiffIds = new Set();  // 학생이 맞힌 차이점 ID
+let wrongClicks = [];          // 오답 클릭 X 표시 애니메이션용
+
+// URL 파라미터에 room이 있으면 자동으로 학생 입장 화면 열기
+window.addEventListener('DOMContentLoaded', () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const roomParam = urlParams.get('room');
+  if (roomParam) {
+    showStudentJoin();
+    document.getElementById('input-room-code').value = roomParam;
+  }
+  // 음성 합성 목록 미리 로드 (규칙 9)
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.getVoices();
+  }
+});
+
+function showScreen(id) {
+  ['screen-home', 'screen-admin-lobby', 'screen-student-join', 'screen-student-wait', 'screen-game']
+    .forEach(s => document.getElementById(s).classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+
+/**
+ * ============================================================================
+ * 규칙 9: 10초 남았을 때 여성 아나운서 목소리 음성 안내
+ * ============================================================================
+ */
+function speak10SecondsLeft() {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance("10초 남았습니다.");
+  utterance.lang = 'ko-KR';
+  utterance.rate = 1.05;
+  utterance.pitch = 1.15; // 밝고 또렷한 아나운서 톤
+
+  const voices = window.speechSynthesis.getVoices();
+  // 한국어 여성 음성 우선 선택 (Google 한국의, Yuna, Heami, SunHi 등)
+  const koFemale = voices.find(v => 
+    v.lang.includes('ko') && 
+    (v.name.includes('Female') || v.name.includes('Yuna') || v.name.includes('Heami') || v.name.includes('SunHi') || v.name.includes('Google'))
+  ) || voices.find(v => v.lang.includes('ko'));
+
+  if (koFemale) utterance.voice = koFemale;
+  window.speechSynthesis.speak(utterance);
+}
+
+/**
+ * ============================================================================
+ * 규칙 5 & 6: 관리자 방 생성 (QR코드) 및 학생 입장 (PeerJS P2P)
+ * ============================================================================
+ */
+function initAdmin() {
+  role = 'admin';
+  showScreen('screen-admin-lobby');
+
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  roomCode = 'CLASS' + randomNum;
+  const peerId = 'SPOTDIFF-' + roomCode;
+
+  peer = new Peer(peerId);
+
+  peer.on('open', () => {
+    document.getElementById('display-room-code').innerText = roomCode;
+    
+    // 접속 URL 생성 후 QR코드 렌더링
+    const baseUrl = window.location.href.split('?')[0];
+    const joinUrl = `${baseUrl}?room=${roomCode}`;
+    document.getElementById('qrcode').innerHTML = '';
+    new QRCode(document.getElementById('qrcode'), {
+      text: joinUrl,
+      width: 180,
+      height: 180,
+      colorDark: "#1e1b4b",
+      colorLight: "#ffffff"
+    });
+  });
+
+  peer.on('connection', (conn) => {
+    conn.on('data', (data) => handleAdminReceive(conn, data));
+    conn.on('close', () => {
+      // 연결 끊김 처리 (점수는 유지)
+    });
+  });
+
+  peer.on('error', (err) => {
+    alert('방 생성 중 네트워크 오류가 발생했습니다. 새로고침 후 다시 시도해주세요.\n' + err.message);
+  });
+}
+
+function handleAdminReceive(conn, data) {
+  if (data.type === 'JOIN') {
+    const num = String(data.studentNum).trim();
+    if (!num) return;
+
+    connections[num] = conn;
+    if (!players[num]) {
+      players[num] = { num: num, score: 0 };
+    }
+
+    updateAdminLobbyUI();
+    conn.send({ type: 'JOIN_OK', studentNum: num, players });
+    broadcast({ type: 'SCORE_UPDATE', players });
+  } 
+  else if (data.type === 'ADD_SCORE') {
+    // 규칙 12: 달라진 부분을 맞힐 때마다 1점씩 증가
+    const num = String(data.studentNum);
+    if (players[num]) {
+      players[num].score += 1;
+      updateTop5HUD();
+      broadcast({ type: 'SCORE_UPDATE', players });
+    }
+  }
+}
+
+function updateAdminLobbyUI() {
+  const listEl = document.getElementById('lobby-player-list');
+  const keys = Object.keys(players).sort((a, b) => Number(a) - Number(b));
+  document.getElementById('player-count').innerText = keys.length;
+  listEl.innerHTML = keys.map(k => `<span class="badge">${k}번 학생</span>`).join('');
+  document.getElementById('btn-start-game').disabled = keys.length === 0;
+}
+
+function broadcast(msg) {
+  Object.values(connections).forEach(conn => {
+    if (conn && conn.open) conn.send(msg);
+  });
+}
+
+function showStudentJoin() {
+  role = 'student';
+  showScreen('screen-student-join');
+}
+
+function joinRoom() {
+  const codeInput = document.getElementById('input-room-code').value.trim().toUpperCase();
+  const numInput = document.getElementById('input-student-num').value.trim();
+  const statusEl = document.getElementById('join-status');
+
+  if (!codeInput || !numInput) {
+    statusEl.innerText = '방 코드와 본인 번호를 모두 입력해주세요.';
+    return;
+  }
+
+  myStudentNum = numInput;
+  statusEl.innerText = '방에 연결하는 중...';
+  document.getElementById('btn-join-room').disabled = true;
+
+  peer = new Peer();
+  peer.on('open', () => {
+    const hostId = 'SPOTDIFF-' + codeInput;
+    adminConn = peer.connect(hostId, { reliable: true });
+
+    adminConn.on('open', () => {
+      adminConn.send({ type: 'JOIN', studentNum: myStudentNum });
+    });
+
+    adminConn.on('data', (data) => handleStudentReceive(data));
+
+    adminConn.on('error', () => {
+      statusEl.innerText = '방을 찾을 수 없습니다. 방 코드를 확인하세요.';
+      document.getElementById('btn-join-room').disabled = false;
+    });
+  });
+}
+
+function handleStudentReceive(data) {
+  if (data.type === 'JOIN_OK') {
+    players = data.players;
+    document.getElementById('my-badge-display').innerText = `${myStudentNum}번 학생`;
+    showScreen('screen-student-wait');
+  }
+  else if (data.type === 'START_ROUND') {
+    currentRound = data.round;
+    roundSceneData = data.scene;
+    foundDiffIds.clear();
+    wrongClicks = [];
+    document.getElementById('round-modal').classList.add('hidden');
+    startRoundFlow();
+  }
+  else if (data.type === 'SCORE_UPDATE') {
+    players = data.players;
+    updateTop5HUD();
+    updateStudentScoreText();
+  }
+  else if (data.type === 'ROUND_END') {
+    players = data.players;
+    showRoundResultModal();
+  }
+}
+
+/**
+ * ============================================================================
+ * 게임 진행 컨트롤 (규칙 1, 2, 3, 7, 8, 9, 10, 11)
+ * ============================================================================
+ */
+function startGame() {
+  currentRound = 1;
+  launchAdminRound(currentRound);
+}
+
+function nextRound() {
+  if (currentRound >= TOTAL_ROUNDS) {
+    alert('모든 10라운드가 종료되었습니다! 수고하셨습니다.');
+    return;
+  }
+  currentRound++;
+  launchAdminRound(currentRound);
+}
+
+function launchAdminRound(roundNum) {
+  document.getElementById('round-modal').classList.add('hidden');
+  // 라운드 난이도에 맞춘 절차적 그림 및 6~8개 차이점 생성
+  roundSceneData = generateRoundScene(roundNum);
+  foundDiffIds.clear();
+  wrongClicks = [];
+
+  broadcast({
+    type: 'START_ROUND',
+    round: roundNum,
+    scene: roundSceneData
+  });
+
+  startRoundFlow();
+}
+
+function startRoundFlow() {
+  showScreen('screen-game');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('round-indicator').innerText = `${currentRound} / ${TOTAL_ROUNDS} 라운드`;
+  updateTop5HUD();
+  updateStudentScoreText();
+
+  // 1단계: 원래 그림 20초 공개 (규칙 1)
+  currentPhase = 'memorize';
+  timeLeft = PHASE1_TIME;
+  announced10Sec = false;
+  document.getElementById('phase-banner').innerText = `👀 [원래 그림] 20초 동안 그림을 잘 기억하세요!`;
+  document.getElementById('phase-banner').style.background = '#1e293b';
+  renderCanvas();
+
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    updateTimerHUD();
+
+    // 규칙 9: 10초 남을 때 여성 아나운서 목소리
+    if (timeLeft === 10 && !announced10Sec) {
+      announced10Sec = true;
+      speak10SecondsLeft();
+    }
+
+    if (timeLeft <= 0) {
+      if (currentPhase === 'memorize') {
+        // 2단계 전환: 달라진 그림 40초 공개 (규칙 2, 3)
+        switchToFindPhase();
+      } else if (currentPhase === 'find') {
+        // 라운드 종료
+        clearInterval(timerInterval);
+        endCurrentRound();
+      }
+    }
+  }, 1000);
+  updateTimerHUD();
+}
+
+function switchToFindPhase() {
+  currentPhase = 'find';
+  timeLeft = PHASE2_TIME;
+  announced10Sec = false;
+  const totalDiffs = roundSceneData.differences.length;
+  document.getElementById('phase-banner').innerText =
+    role === 'student'
+      ? `🔍 [달라진 그림] 40초 안에 달라진 곳 ${totalDiffs}개를 터치하세요!`
+      : `🔍 [달라진 그림] 학생들이 ${totalDiffs}개의 차이점을 찾고 있습니다!`;
+  document.getElementById('phase-banner').style.background = '#4f46e5';
+  updateTimerHUD();
+  renderCanvas();
+}
+
+function updateTimerHUD() {
+  const timerEl = document.getElementById('timer-display');
+  const boxEl = document.getElementById('timer-box');
+  timerEl.innerText = `${timeLeft}초`;
+  if (timeLeft <= 10) {
+    boxEl.classList.add('timer-warning');
+  } else {
+    boxEl.classList.remove('timer-warning');
+  }
+}
+
+// 규칙 10: 실시간 랭킹 상위 5위까지 오른쪽 상단에 표시
+function updateTop5HUD() {
+  const sorted = Object.values(players).sort((a, b) => b.score - a.score || Number(a.num) - Number(b.num));
+  const top5 = sorted.slice(0, 5);
+  const listEl = document.getElementById('top5-list');
+  if (top5.length === 0) {
+    listEl.innerHTML = '<li>참가자 없음</li>';
+    return;
+  }
+  listEl.innerHTML = top5.map((p, idx) => `
+    <li>
+      <span>${idx + 1}위. ${p.num}번</span>
+      <span>${p.score}점</span>
+    </li>
+  `).join('');
+}
+
+function updateStudentScoreText() {
+  const el = document.getElementById('student-score-status');
+  if (role !== 'student') {
+    el.innerText = `관리자 관전 모드 (달라진 부분 총 ${roundSceneData.differences.length}개)`;
+    return;
+  }
+  const myScore = players[myStudentNum] ? players[myStudentNum].score : 0;
+  const total = roundSceneData.differences.length;
+  el.innerText = `내 번호: ${myStudentNum}번 | 이번 라운드 찾은 개수: ${foundDiffIds.size} / ${total} | 총 누적 점수: ${myScore}점`;
+}
+
+function endCurrentRound() {
+  currentPhase = 'result';
+  renderCanvas(); // 종료 시 정답 위치 모두 공개
+  if (role === 'admin') {
+    broadcast({ type: 'ROUND_END', players });
+    showRoundResultModal();
+  }
+}
+
+// 규칙 6 & 11: 라운드 종료 시 전체 점수 공개 및 학생 본인 등수 확인
+function showRoundResultModal() {
+  const modal = document.getElementById('round-modal');
+  modal.classList.remove('hidden');
+
+  const isFinal = currentRound >= TOTAL_ROUNDS;
+  document.getElementById('modal-title').innerText = isFinal
+    ? '🎊 최종 10라운드 종료! 최종 결과 🎊'
+    : `⏱️ ${currentRound}라운드 종료!`;
+
+  const sorted = Object.values(players).sort((a, b) => b.score - a.score || Number(a.num) - Number(b.num));
+
+  // 학생 본인 등수 표시 (동점자 동일 등수 계산)
+  const myRankBox = document.getElementById('my-rank-box');
+  if (role === 'student' && players[myStudentNum]) {
+    const myScore = players[myStudentNum].score;
+    const myRank = sorted.findIndex(p => p.score === myScore) + 1;
+    myRankBox.classList.remove('hidden');
+    myRankBox.innerText = `🏅 ${myStudentNum}번 학생의 현재 등수: 전체 ${sorted.length}명 중 ${myRank}등 (${myScore}점)`;
+  } else {
+    myRankBox.classList.add('hidden');
+  }
+
+  // 전체 점수 테이블 렌더링
+  const tbody = document.getElementById('modal-rank-body');
+  tbody.innerHTML = sorted.map((p) => {
+    const rank = sorted.findIndex(item => item.score === p.score) + 1;
+    const isMe = role === 'student' && p.num === myStudentNum;
+    return `<tr style="${isMe ? 'background:#fef3c7; font-weight:800;' : ''}">
+      <td>${rank}위</td>
+      <td>${p.num}번</td>
+      <td>${p.score}점</td>
+    </tr>`;
+  }).join('');
+
+  if (role === 'admin') {
+    document.getElementById('admin-next-controls').classList.remove('hidden');
+    document.getElementById('student-wait-next').classList.add('hidden');
+    const nextBtn = document.getElementById('btn-next-round');
+    if (isFinal) {
+      nextBtn.innerText = '새 게임 하기 (처음으로)';
+      nextBtn.onclick = () => location.reload();
+    } else {
+      nextBtn.innerText = `다음 라운드 시작 (${currentRound + 1} / ${TOTAL_ROUNDS} 라운드) ▶`;
+    }
+  } else {
+    document.getElementById('admin-next-controls').classList.add('hidden');
+    document.getElementById('student-wait-next').classList.remove('hidden');
+    if (isFinal) {
+      document.getElementById('student-wait-next').innerText = '모든 라운드가 끝났습니다! 수고했어요 👏';
+    }
+  }
+}
+
+/**
+ * ============================================================================
+ * 규칙 3 & 12: 달라진 그림 클릭 판정 및 동그라미 표시
+ * ============================================================================
+ */
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (role !== 'student' || currentPhase !== 'find') return;
+
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top) * scaleY;
+
+  let hit = false;
+  for (const diff of roundSceneData.differences) {
+    if (foundDiffIds.has(diff.id)) continue;
+    const dist = Math.hypot(x - diff.x, y - diff.y);
+    if (dist <= diff.radius + 14) { // 터치 오차 허용 범위 포함
+      foundDiffIds.add(diff.id);
+      hit = true;
+      // 규칙 12: 맞힐 때마다 1점씩 상승
+      if (adminConn && adminConn.open) {
+        adminConn.send({ type: 'ADD_SCORE', studentNum: myStudentNum });
+      }
+      updateStudentScoreText();
+      break;
+    }
+  }
+
+  if (!hit) {
+    wrongClicks.push({ x, y, created: Date.now() });
+  }
+  renderCanvas();
+});
+
+/**
+ * ============================================================================
+ * 규칙 4 & 13: 라운드별 난이도 상승(캐릭터 수 증가, 지형지물 복잡화) + 6~8개 차이점 생성
+ * ============================================================================
+ */
+function seededRandom(seed) {
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return () => (s = (s * 16807) % 2147483647) / 2147483647;
+}
+
+function generateRoundScene(round) {
+  const rand = seededRandom(Date.now() + round * 997);
+  const W = 900, H = 540;
+
+  // 라운드별 테마 색상 팔레트
+  const themes = [
+    { sky: '#bae6fd', hill1: '#86efac', hill2: '#4ade80', ground: '#22c55e' }, // 낮 초원
+    { sky: '#fed7aa', hill1: '#fdba74', hill2: '#fb923c', ground: '#f97316' }, // 노을 언덕
+    { sky: '#1e1b4b', hill1: '#312e81', hill2: '#3730a3', ground: '#4338ca' }, // 밤하늘
+    { sky: '#e0f2fe', hill1: '#f8fafc', hill2: '#e2e8f0', ground: '#cbd5e1' }, // 설원
+    { sky: '#fef08a', hill1: '#fde047', hill2: '#eab308', ground: '#ca8a04' }  // 사막/황금들판
+  ];
+  const theme = themes[(round - 1) % themes.length];
+
+  const items = [];
+  let idCounter = 1;
+
+  // 규칙 4: 라운드가 올라갈수록 지형지물과 캐릭터 수 증가
+  const cloudCount = 2 + Math.floor(round * 0.6);       // 2 ~ 8개
+  const treeCount = 3 + Math.floor(round * 0.8);        // 3 ~ 11개
+  const houseCount = 1 + Math.floor(round * 0.5);       // 1 ~ 6개
+  const propCount = 3 + round * 2;                      // 바위, 꽃, 울타리, 별/풍선 등 5 ~ 23개
+  const charCount = 2 + round;                          // 캐릭터 수: 1라운드 3명 -> 10라운드 12명!
+
+  // 1. 하늘 요소 (태양/달 + 구름)
+  items.push({
+    id: idCounter++, type: 'sun', x: 110, y: 85, size: 36,
+    color: round % 3 === 0 ? '#fef08a' : '#facc15',
+    altColor: '#f43f5e', altSize: 50
+  });
+
+  for (let i = 0; i < cloudCount; i++) {
+    items.push({
+      id: idCounter++, type: 'cloud',
+      x: 160 + (i * (700 / cloudCount)) + (rand() * 30 - 15),
+      y: 55 + rand() * 75,
+      size: 24 + rand() * 14,
+      color: '#ffffff',
+      altColor: '#94a3b8', altMissing: true
+    });
+  }
+
+  // 2. 건물(집)
+  for (let i = 0; i < houseCount; i++) {
+    const hx = 100 + (i * (720 / houseCount)) + (rand() * 30 - 15);
+    const hy = 255 + rand() * 35;
+    const roofColors = ['#ef4444', '#8b5cf6', '#ec4899', '#0ea5e9', '#f59e0b'];
+    const baseRoof = roofColors[Math.floor(rand() * roofColors.length)];
+    items.push({
+      id: idCounter++, type: 'house',
+      x: hx, y: hy, size: 42 + (round > 5 ? 0 : 6),
+      color: baseRoof,
+      altColor: baseRoof === '#ef4444' ? '#06b6d4' : '#ef4444',
+      altExtra: true // 굴뚝 연기 추가/제거
+    });
+  }
+
+  // 3. 나무 및 지형지물
+  for (let i = 0; i < treeCount; i++) {
+    const tx = 50 + (i * (810 / treeCount)) + (rand() * 25 - 12);
+    const ty = 270 + rand() * 190;
+    const treeColors = ['#15803d', '#16a34a', '#059669', '#65a30d'];
+    const c = treeColors[Math.floor(rand() * treeColors.length)];
+    items.push({
+      id: idCounter++, type: 'tree',
+      x: tx, y: ty, size: 26 + rand() * 12,
+      color: c,
+      altColor: '#ea580c', // 단풍색으로 변신
+      altMissing: rand() > 0.5
+    });
+  }
+
+  // 4. 소품 (꽃, 바위, 풍선, 표지판) - 라운드가 높을수록 빽빽해짐
+  const propTypes = ['flower', 'rock', 'balloon', 'mushroom'];
+  for (let i = 0; i < propCount; i++) {
+    const pType = propTypes[Math.floor(rand() * propTypes.length)];
+    const px = 45 + rand() * 810;
+    const py = pType === 'balloon' ? 130 + rand() * 110 : 310 + rand() * 200;
+    const colors = ['#ec4899', '#3b82f6', '#eab308', '#a855f7', '#14b8a6'];
+    const c = colors[Math.floor(rand() * colors.length)];
+    items.push({
+      id: idCounter++, type: pType,
+      x: px, y: py, size: 15 + rand() * 6,
+      color: c,
+      altColor: c === '#ec4899' ? '#22d3ee' : '#ec4899',
+      altMissing: rand() > 0.45
+    });
+  }
+
+  // 5. 캐릭터들 (모자, 표정, 옷 색깔, 동물 귀 등 다양화)
+  const charStyles = ['boy', 'girl', 'cat', 'bear', 'robot', 'alien'];
+  const shirtColors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+  for (let i = 0; i < charCount; i++) {
+    const cx = 65 + (i * (780 / charCount)) + (rand() * 25 - 12);
+    const cy = 330 + rand() * 165;
+    const style = charStyles[(i + round) % charStyles.length];
+    const sColor = shirtColors[Math.floor(rand() * shirtColors.length)];
+    items.push({
+      id: idCounter++, type: 'character',
+      charStyle: style,
+      x: cx, y: cy, size: 26,
+      color: sColor,
+      hasHat: rand() > 0.4,
+      altColor: sColor === '#ef4444' ? '#eab308' : '#ef4444',
+      altHatToggle: true // 모자가 생기거나 사라짐
+    });
+  }
+
+  // 겹치지 않게 위치 보정 후 6~8개의 차이점(differences) 무작위 선정 (규칙 13)
+  const diffCount = 6 + Math.floor(rand() * 3); // 6, 7, 8 중 하나
+  const shuffled = [...items].sort(() => rand() - 0.5);
+  const selectedDiffs = [];
+
+  for (const item of shuffled) {
+    if (selectedDiffs.length >= diffCount) break;
+    // 다른 정답 원과 너무 가까우면 건너뜀 (최소 65px 간격)
+    const tooClose = selectedDiffs.some(d => Math.hypot(d.x - item.x, d.y - item.y) < 65);
+    if (!tooClose) {
+      const modeRoll = rand();
+      let diffMode = 'color';
+      if (item.type === 'character') diffMode = modeRoll > 0.5 ? 'hat' : 'color';
+      else if (item.altMissing && modeRoll > 0.55) diffMode = 'missing';
+      else if (item.type === 'house') diffMode = 'smoke';
+
+      selectedDiffs.push({
+        id: item.id,
+        x: item.x,
+        y: item.y,
+        radius: Math.max(26, item.size + 6),
+        mode: diffMode
+      });
+    }
+  }
+
+  return { round, theme, items, differences: selectedDiffs };
+}
+
+/**
+ * ============================================================================
+ * 캔버스 렌더링 (원래 그림 vs 달라진 그림 + 동그라미 표시)
+ * ============================================================================
+ */
+function renderCanvas() {
+  if (!roundSceneData) return;
+  const { theme, items, differences } = roundSceneData;
+  const isModified = (currentPhase === 'find' || currentPhase === 'result');
+  const diffMap = new Map(differences.map(d => [d.id, d]));
+
+  // 배경 하늘
+  ctx.fillStyle = theme.sky;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 배경 언덕 & 땅
+  ctx.fillStyle = theme.hill1;
+  ctx.beginPath();
+  ctx.arc(220, 360, 260, Math.PI, 0);
+  ctx.arc(680, 370, 290, Math.PI, 0);
+  ctx.fill();
+
+  ctx.fillStyle = theme.ground;
+  ctx.fillRect(0, 290, canvas.width, 250);
+
+  // Y좌표 기준 정렬 (원근감 표현)
+  const sortedItems = [...items].sort((a, b) => a.y - b.y);
+
+  for (const item of sortedItems) {
+    const diff = isModified ? diffMap.get(item.id) : null;
+    if (diff && diff.mode === 'missing') continue; // 사라진 오브젝트
+
+    const drawColor = (diff && diff.mode === 'color') ? item.altColor : item.color;
+    drawSceneItem(ctx, item, drawColor, diff);
+  }
+
+  // 규칙 3: 찾은 달라진 부분에 빨간색/초록색 동그라미 표시
+  differences.forEach(diff => {
+    if (foundDiffIds.has(diff.id)) {
+      ctx.save();
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(diff.x, diff.y, diff.radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(diff.x, diff.y, diff.radius + 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    } else if (currentPhase === 'result') {
+      // 라운드 종료 시 못 찾은 정답도 파란 점선 동그라미로 공개
+      ctx.save();
+      ctx.strokeStyle = '#2563eb';
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(diff.x, diff.y, diff.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  });
+
+  // 오답 터치 시 잠깐 X 표시
+  const now = Date.now();
+  wrongClicks = wrongClicks.filter(w => now - w.created < 600);
+  wrongClicks.forEach(w => {
+    ctx.save();
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(w.x - 12, w.y - 12); ctx.lineTo(w.x + 12, w.y + 12);
+    ctx.moveTo(w.x + 12, w.y - 12); ctx.lineTo(w.x - 12, w.y + 12);
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+
+function drawSceneItem(ctx, item, color, diff) {
+  const { type, x, y, size } = item;
+  ctx.save();
+
+  if (type === 'sun') {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  else if (type === 'cloud') {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x - size * 0.6, y, size * 0.7, 0, Math.PI * 2);
+    ctx.arc(x, y - size * 0.25, size * 0.85, 0, Math.PI * 2);
+    ctx.arc(x + size * 0.65, y, size * 0.65, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  else if (type === 'house') {
+    // 벽체
+    ctx.fillStyle = '#fef3c7';
+    ctx.fillRect(x - size * 0.7, y - size * 0.4, size * 1.4, size);
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x - size * 0.7, y - size * 0.4, size * 1.4, size);
+    // 지붕
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x - size * 0.85, y - size * 0.4);
+    ctx.lineTo(x, y - size * 1.15);
+    ctx.lineTo(x + size * 0.85, y - size * 0.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // 문
+    ctx.fillStyle = '#92400e';
+    ctx.fillRect(x - size * 0.2, y + size * 0.1, size * 0.4, size * 0.5);
+    // 차이점: 굴뚝 연기 유무
+    if (diff && diff.mode === 'smoke') {
+      ctx.fillStyle = '#64748b';
+      ctx.beginPath();
+      ctx.arc(x + size * 0.45, y - size * 1.1, 8, 0, Math.PI * 2);
+      ctx.arc(x + size * 0.6, y - size * 1.35, 11, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  else if (type === 'tree') {
+    // 기둥
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(x - 6, y, 12, size * 0.9);
+    // 잎
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y - size * 0.2, size * 0.85, 0, Math.PI * 2);
+    ctx.arc(x - size * 0.45, y + size * 0.1, size * 0.6, 0, Math.PI * 2);
+    ctx.arc(x + size * 0.45, y + size * 0.1, size * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  else if (type === 'flower') {
+    ctx.strokeStyle = '#15803d';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x, y + 16);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    for (let a = 0; a < 5; a++) {
+      const rad = (a * Math.PI * 2) / 5;
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(rad) * 7, y + Math.sin(rad) * 7, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  else if (type === 'rock') {
+    ctx.fillStyle = diff && diff.mode === 'color' ? '#f472b6' : '#64748b';
+    ctx.beginPath();
+    ctx.ellipse(x, y, size * 0.9, size * 0.6, 0, Math.PI, 0);
+    ctx.fill();
+  }
+  else if (type === 'balloon') {
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y + size); ctx.lineTo(x, y + size + 22);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(x, y, size * 0.75, size, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  else if (type === 'mushroom') {
+    ctx.fillStyle = '#fef3c7';
+    ctx.fillRect(x - 5, y, 10, 12);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, size * 0.8, Math.PI, 0);
+    ctx.fill();
+  }
+  else if (type === 'character') {
+    // 몸통 (옷)
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(x - 13, y - 2, 26, 24, 6);
+    ctx.fill();
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 얼굴
+    const faceColor = item.charStyle === 'alien' ? '#a3e635' :
+                      item.charStyle === 'robot' ? '#cbd5e1' :
+                      item.charStyle === 'bear' ? '#d97706' : '#fde68a';
+    ctx.fillStyle = faceColor;
+    ctx.beginPath();
+    ctx.arc(x, y - 15, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 동물 귀 / 로봇 안테나
+    if (item.charStyle === 'cat' || item.charStyle === 'bear') {
+      ctx.beginPath();
+      ctx.arc(x - 11, y - 26, 5, 0, Math.PI * 2);
+      ctx.arc(x + 11, y - 26, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (item.charStyle === 'robot' || item.charStyle === 'alien') {
+      ctx.beginPath();
+      ctx.moveTo(x, y - 29); ctx.lineTo(x, y - 38);
+      ctx.stroke();
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(x, y - 39, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 눈 & 입
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(x - 5, y - 16, 2, 0, Math.PI * 2);
+    ctx.arc(x + 5, y - 16, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y - 12, 4, 0, Math.PI);
+    ctx.stroke();
+
+    // 모자 (차이점: 모자 토글)
+    const showHat = (diff && diff.mode === 'hat') ? !item.hasHat : item.hasHat;
+    if (showHat) {
+      ctx.fillStyle = '#1d4ed8';
+      ctx.beginPath();
+      ctx.arc(x, y - 22, 13, Math.PI, 0);
+      ctx.fill();
+      ctx.fillRect(x - 17, y - 23, 34, 4);
+    }
+  }
+
+  ctx.restore();
+}
+</script>
+</body>
+</html>
